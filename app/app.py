@@ -96,7 +96,7 @@ def extract_url_features(url):
     return features
 
 MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_FILE = 'final_phishing_model.joblib'
+MODEL_FILE = '../models/final_phishing_model.joblib'
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_FILE)
 
 model_components = None
