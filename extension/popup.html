@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WEBSENTRY: PHISHING DETECTION</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+    <div class="container">
+
+        <header class="popup-header">
+            <h1>WEBSENTRY: PHISHING DETECTION</h1>
+            <p class="subtitle">Analyze the current page for potential threats.</p>
+        </header>
+
+        <section class="action-section" id="currentPageActionsSection">
+            <h2>Current Page Analysis</h2>
+            <div id="currentPageInfo">
+                <p class="label-display">Current URL:</p>
+                <p id="currentPageUrl" class="url-display-box">Loading...</p>
+            </div>
+            <div class="button-grid">
+                <button id="scanCurrentPageButton">Scan Current Page for Threats</button>
+            </div>
+        </section>
+        
+        <section id="resultsDisplayArea" class="results-section" aria-live="polite" style="display: none;">
+            <h3>Analysis Results</h3>
+            <div id="scanResultSubSection" style="display: none;">
+                <div id="resultArea" class="status-box">
+                    <p id="status"></p>
+                    <div class="pill-row">
+                        <p id="riskLevel" class="risk-pill">Risk: —</p>
+                        <p id="modelAccuracyLive" class="metric-pill" style="display: none;">Overall Model Accuracy —</p>
+                        <p id="modelAUC" class="metric-pill" style="display: none;">Model AUC: —</p>
+                        <p id="predictionConfidence" class="metric-pill" style="display: none;">Prediction Confidence —</p>
+                    </div>
+                    <p id="message"></p>
+                    <div id="riskReasons" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2);">
+                        <p style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">Why was this site flagged?</p>
+                        <ul id="riskReasonsList" style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div id="analysisBreakdownSection" class="details-box" style="display: none; margin-top: 15px;">
+                <h4>Threat Breakdown</h4>
+                <div class="probability-display">
+                    <div class="probability-labels">
+                        <span id="safePercentage">Safe: 0%</span>
+                        <span id="phishingPercentage">Phishing: 0%</span>
+                    </div>
+                    <div class="progress-bar-background">
+                        <div id="safeProgressBar" class="progress-bar-safe"></div>
+                    </div>
+                </div>
+                <div class="token-section">
+                    <p class="label-display">Key URL Features Analyzed:</p>
+                    <div id="tokenContainer" class="token-container">
+                        </div>
+                </div>
+            </div>
+            
+            <div id="pageDetailsSubSection" class="details-box" style="display: none; margin-top:10px;">
+                <h4>Page Content Overview:</h4>
+                <p id="pageDetailTitle"></p>
+                <p id="pageDetailPCount"></p>
+                <p id="pageDetailH1"></p>
+            </div>
+
+            <div id="modelInsightsSection" class="details-box" style="display: none; margin-top: 15px;">
+                <h4>Model Insights</h4>
+                <div class="model-summary">
+                    <p><span class="label-display">Active Model:</span> <span id="activeModelName" class="model-highlight">—</span></p>
+                    <div class="model-metric-pills">
+                        <span class="metric-pill" id="activeModelAccuracy">Accuracy —</span>
+                        <span class="metric-pill" id="activeModelRecall">Phishing Recall —</span>
+                        <span class="metric-pill" id="activeModelF1">Phishing F1 —</span>
+                        <span class="metric-pill" id="activeModelAUC">AUC —</span>
+                    </div>
+                    
+                </div>
+                <div>
+                    <p class="label-display" style="margin-bottom: 8px;">Model Comparison Snapshot <span style="font-size: 11px; color: var(--foreground-secondary); font-weight: normal;">(Click any model to activate)</span></p>
+                    <div id="modelComparisonGrid" class="model-comparison-grid"></div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>
