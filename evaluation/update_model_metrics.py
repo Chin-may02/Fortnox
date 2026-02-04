@@ -6,7 +6,7 @@ import joblib
 
 def update_model_metrics():
     # Load the existing model
-    data = joblib.load('final_phishing_model.joblib')
+    data = joblib.load('../models/final_phishing_model.joblib')
     
     # Get current metrics
     print("Current metrics:")

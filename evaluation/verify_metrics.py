@@ -1,6 +1,6 @@
 import joblib
 
-data = joblib.load('final_phishing_model.joblib')
+data = joblib.load('../models/final_phishing_model.joblib')
 all_metrics = data.get('all_model_metrics', {})
 
 print('Checking metrics in saved model file:')

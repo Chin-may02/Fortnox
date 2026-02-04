@@ -58,7 +58,7 @@ def extract_url_features(url):
 
 try:
     print("Attempting to load CLEANED dataset: 'phishing_site_urls_cleaned.csv'")
-    df = pd.read_csv('phishing_site_urls_cleaned.csv')
+    df = pd.read_csv('../data/phishing_site_urls_cleaned.csv')
     print(f"✓ Cleaned dataset loaded successfully: {len(df)} rows")
 except FileNotFoundError:
     print("\nFATAL ERROR: 'phishing_site_urls_cleaned.csv' not found.")
@@ -239,5 +239,6 @@ model_components = {
     # Store all trained models so the extension can switch between them in real-time.
     'trained_models': models
 }
-joblib.dump(model_components, 'final_phishing_model.joblib')
+joblib.dump(model_components, '../models/final_phishing_model.joblib')
 print("✓ Model saved as 'final_phishing_model.joblib' successfully!")
+print("Training process completed.")

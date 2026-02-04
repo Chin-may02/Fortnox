@@ -8,7 +8,7 @@ import numpy as np
 
 # Load model file to get current metrics
 print("Loading model file...")
-model_data = joblib.load('final_phishing_model.joblib')
+model_data = joblib.load('../models/final_phishing_model.joblib')
 all_model_metrics = model_data.get('all_model_metrics', {})
 
 # Define model order (matching your current setup)
@@ -63,7 +63,7 @@ ax2.set_ylabel('Time (seconds)', fontsize=12, fontweight='bold', color='#f59e0b'
 ax2.tick_params(axis='y', labelcolor='#f59e0b')
 
 # Title
-ax1.set_title('WEBSENTRY: Model Performance Comparison', fontsize=14, fontweight='bold', pad=20)
+ax1.set_title('FORTNOX: Model Performance Comparison', fontsize=14, fontweight='bold', pad=20)
 
 # Combine legends from both axes
 lines1, labels1 = ax1.get_legend_handles_labels()

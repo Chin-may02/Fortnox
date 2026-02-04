@@ -157,4 +157,4 @@ if __name__ == "__main__":
     print(f"Cleaned: {len(cleaned_df)} rows")
     print(f"Removed: {len(df) - len(cleaned_df)} problematic entries")
 
-    cleaned_df.to_csv('phishing_site_urls_cleaned.csv', index=False)
+    cleaned_df.to_csv('../data/phishing_site_urls_cleaned.csv', index=False)
