@@ -198,53 +198,6 @@ def is_whitelisted_domain(url):
         
         # Whitelist of legitimate bank domains and trusted institutions
         whitelisted_domains = [
-            # Malaysian Banks
-            'maybank2u.com.my',
-            'cimbclicks.com.my',
-            'publicbank.com.my',
-            'hongleong.com.my',
-            'rhb.com.my',
-            'ambankgroup.com',
-            'alliancebank.com.my',
-            'affinbank.com.my',
-            'bankislam.com.my',
-            'muamalat.com.my',
-            
-            # Malaysian Public Universities (IPTA)
-            'um.edu.my',  # Universiti Malaya
-            'usm.my',  # Universiti Sains Malaysia
-            'ukm.my',  # Universiti Kebangsaan Malaysia
-            'utm.my',  # Universiti Teknologi Malaysia
-            'upm.edu.my',  # Universiti Putra Malaysia
-            'uitm.edu.my',  # Universiti Teknologi MARA
-            'unimas.my',  # Universiti Malaysia Sarawak
-            'ums.edu.my',  # Universiti Malaysia Sabah
-            'unimap.edu.my',  # Universiti Malaysia Perlis
-            'ump.edu.my',  # Universiti Malaysia Pahang
-            'uthm.edu.my',  # Universiti Tun Hussein Onn Malaysia
-            'utem.edu.my',  # Universiti Teknikal Malaysia Melaka
-            'unikl.edu.my',  # Universiti Kuala Lumpur
-            'uniten.edu.my',  # Universiti Tenaga Nasional
-            'mmu.edu.my',  # Multimedia University
-            'usim.edu.my',  # Universiti Sains Islam Malaysia
-            'iium.edu.my',  # International Islamic University Malaysia
-            'unirazak.edu.my',  # Universiti Tun Abdul Razak
-            'open.edu.my',  # Open University Malaysia
-            'oum.edu.my',  # Open University Malaysia (alternative)
-            'limkokwing.edu.my',  # Limkokwing University
-            'sunway.edu.my',  # Sunway University
-            'taylors.edu.my',  # Taylor's University
-            'monash.edu.my',  # Monash University Malaysia
-            'nottingham.edu.my',  # University of Nottingham Malaysia
-            'curtin.edu.my',  # Curtin University Malaysia
-            'swinburne.edu.my',  # Swinburne University Malaysia
-            'help.edu.my',  # HELP University
-            'apu.edu.my',  # Asia Pacific University
-            'segi.edu.my',  # SEGi University
-            'ucsiuniversity.edu.my',  # UCSI University
-            'utar.edu.my',  # Universiti Tunku Abdul Rahman
-            'university.edu.my',  # Generic .edu.my
-            
             # International Educational Institutions (Major Universities)
             'harvard.edu',
             'mit.edu',
@@ -297,80 +250,91 @@ def is_whitelisted_domain(url):
             'nus.edu.sg',  # National University of Singapore
             'ntu.edu.sg',  # Nanyang Technological University
             
-            # Malaysian Government Organizations (.gov.my)
-            'gov.my',  # All .gov.my domains
-            'jdn.gov.my',  # Jabatan Digital Negara
-            'moe.gov.my',  # Ministry of Education
-            'moh.gov.my',  # Ministry of Health
-            'mof.gov.my',  # Ministry of Finance
-            'moha.gov.my',  # Ministry of Home Affairs
-            'mosti.gov.my',  # Ministry of Science, Technology and Innovation
-            'mkn.gov.my',  # National Security Council
-            'mampu.gov.my',  # Malaysian Administrative Modernisation and Management Planning Unit
-            'mcmc.gov.my',  # Malaysian Communications and Multimedia Commission
-            'mdec.gov.my',  # Malaysia Digital Economy Corporation
-            'mof.gov.my',  # Ministry of Finance
-            'treasury.gov.my',  # Treasury
-            'bnm.gov.my',  # Bank Negara Malaysia
-            'ssm.com.my',  # Companies Commission of Malaysia
-            'lhdn.gov.my',  # Lembaga Hasil Dalam Negeri (Inland Revenue Board)
-            'jpj.gov.my',  # Jabatan Pengangkutan Jalan
-            'jpn.gov.my',  # Jabatan Pendaftaran Negara
-            'jabatanpenerangan.gov.my',  # Department of Information
-            'epu.gov.my',  # Economic Planning Unit
-            'jpa.gov.my',  # Public Service Department
-            'jps.gov.my',  # Department of Irrigation and Drainage
-            'jkr.gov.my',  # Public Works Department
-            'jpsm.gov.my',  # Department of Statistics Malaysia
-            'jkm.gov.my',  # Department of Social Welfare
-            'jpnin.gov.my',  # National Registration Department
-            'jabatanpenerangan.gov.my',  # Department of Information
-            'jpm.gov.my',  # Prime Minister's Department
-            'kklw.gov.my',  # Ministry of Rural Development
-            'kkm.gov.my',  # Ministry of Health
-            'kementerianpendidikan.gov.my',  # Ministry of Education
-            'kementerianpengajiantinggi.gov.my',  # Ministry of Higher Education
-            'kementerianpengangkutan.gov.my',  # Ministry of Transport
-            'kementerianperdagangan.gov.my',  # Ministry of Trade
-            'kementerianpertanian.gov.my',  # Ministry of Agriculture
-            'kementerianperumahan.gov.my',  # Ministry of Housing
-            'kementerianpenerangan.gov.my',  # Ministry of Communications
-            'kementerianpembangunanwanita.gov.my',  # Ministry of Women Development
-            'kementerianbelia.gov.my',  # Ministry of Youth
-            'kementeriansukan.gov.my',  # Ministry of Sports
-            'kementerianpelancongan.gov.my',  # Ministry of Tourism
-            'kementerianluarnegara.gov.my',  # Ministry of Foreign Affairs
-            'kementerianpertahanan.gov.my',  # Ministry of Defence
-            'kementeriankerjaraya.gov.my',  # Ministry of Works
-            'kementerianenergi.gov.my',  # Ministry of Energy
-            'kementerianalamsekitar.gov.my',  # Ministry of Environment
-            'kementerianperdaganganantarabangsa.gov.my',  # Ministry of International Trade
-            'kementerianperusahaanperladangan.gov.my',  # Ministry of Plantation Industries
-            'kementerianperusahaanpertanian.gov.my',  # Ministry of Agriculture and Agro-based Industry
-            'kementerianperumahan.gov.my',  # Ministry of Housing and Local Government
-            'kementerianpembangunanluarbandar.gov.my',  # Ministry of Rural and Regional Development
-            'kementerianpengangkutan.gov.my',  # Ministry of Transport
-            'kementerianpenerangan.gov.my',  # Ministry of Communications and Multimedia
-            'kementerianbeliadansukan.gov.my',  # Ministry of Youth and Sports
-            'kementerianpelancongan.gov.my',  # Ministry of Tourism, Arts and Culture
-            'kementerianluarnegara.gov.my',  # Ministry of Foreign Affairs
-            'kementerianpertahanan.gov.my',  # Ministry of Defence
-            'kementeriankerjaraya.gov.my',  # Ministry of Works
-            'kementerianenergi.gov.my',  # Ministry of Energy, Green Technology and Water
-            'kementerianalamsekitar.gov.my',  # Ministry of Natural Resources and Environment
-            'kementerianperdaganganantarabangsa.gov.my',  # Ministry of International Trade and Industry
-            
-            # Malaysian Security Organizations (non-.gov.my domains)
-            'cybersecurity.my',  # CyberSecurity Malaysia
-            'mdec.gov.my',  # Malaysia Digital Economy Corporation
+            # Indian Banks (Public & Private)
+            'sbi.co.in',
+            'onlinesbi.com',
+            'hdfcbank.com',
+            'icicibank.com',
+            'axisbank.com',
+            'kotak.com',
+            'indusind.com',
+            'yesbank.in',
+            'bankofbaroda.in',
+            'pnbindia.in',
+            'canarabank.com',
+            'unionbankofindia.co.in',
+            'idbibank.in',
+            'centralbankofindia.co.in',
+            'iob.in',
+            'ucobank.com',
+            'bankofindia.co.in',
+            'rbi.org.in',
+
+            # Indian Government & Public Sector
+            'gov.in',
+            'nic.in',
+            'india.gov.in',
+            'uidai.gov.in',        # Aadhaar
+            'incometax.gov.in',
+            'gst.gov.in',
+            'digilocker.gov.in',
+            'mygov.in',
+            'parivahan.gov.in',
+            'passportindia.gov.in',
+            'epfindia.gov.in',
+            'esic.gov.in',
+            'mca.gov.in',
+            'niti.gov.in',
+            'meity.gov.in',
+            'mospi.gov.in',
+            'irctc.co.in',
+
+            # Indian Educational Institutions (Central / State / IIT / NIT)
+            'edu.in',
+            'ac.in',
+            'ugc.ac.in',
+            'aicte-india.org',
+            'nta.ac.in',
+
+            # IITs
+            'iitb.ac.in',
+            'iitd.ac.in',
+            'iitm.ac.in',
+            'iitk.ac.in',
+            'iitkgp.ac.in',
+            'iitr.ac.in',
+            'iitg.ac.in',
+            'iith.ac.in',
+            'iiti.ac.in',
+
+            # NITs
+            'nitk.ac.in',
+            'nitrkl.ac.in',
+            'nitw.ac.in',
+            'nitt.edu',
+            'nits.ac.in',
+            'nitc.ac.in',
+
+            # Major Indian Universities
+            'du.ac.in',
+            'jnu.ac.in',
+            'uohyd.ac.in',
+            'bhu.ac.in',
+            'jamiahamdard.edu',
+            'jamia.edu',
+            'amu.ac.in',
+            'annauniv.edu',
+            'vit.ac.in',
+            'manipal.edu',
+            'bits-pilani.ac.in',
         ]
         
         # Check if domain ends with .gov.my (all Malaysian government domains)
-        if domain.endswith('.gov.my') or domain == 'gov.my':
+        if domain.endswith('.gov.in') or domain.endswith('.nic.in') or domain == 'gov.in':
             return True
-        
-        # Check if domain ends with .edu.my (all Malaysian educational institutions)
-        if domain.endswith('.edu.my') or domain == 'edu.my':
+
+        # All Indian educational institutions
+        if domain.endswith('.ac.in') or domain.endswith('.edu.in'):
             return True
         
         # Check if domain matches any whitelisted domain exactly or is a subdomain

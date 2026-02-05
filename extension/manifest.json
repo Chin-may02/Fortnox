@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "name": "FORTNOX: PHISHING DETECTION",
+    "name": "FORTNOX",
     "version": "0.1.0",
     "description": "A prototype ML-based Chrome extension for web security.",
     "permissions": [
