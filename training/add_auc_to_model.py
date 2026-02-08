@@ -144,9 +144,3 @@ for model_name, metrics in all_model_metrics.items():
     print(f"  Recall (phishing): {metrics.get('recall_phishing', 0):.4f} ({metrics.get('recall_phishing', 0)*100:.1f}%)")
     print(f"  F1 (phishing): {metrics.get('f1_phishing', 0):.4f} ({metrics.get('f1_phishing', 0)*100:.1f}%)")
     print(f"  AUC: {auc:.4f} ({auc*100:.1f}%)")
-
-
-
-
-
-
