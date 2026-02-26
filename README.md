@@ -110,8 +110,3 @@ This updates:
 - Back up model artifacts before retraining to avoid accidental overwrite.
 - Reporting scripts read metrics from the current saved model, so stale model files produce stale reports.
 
-## Extra Context
-
-For detailed LLM handoff notes, see:
-- `PROJECT_CONTEXT.md`
-
