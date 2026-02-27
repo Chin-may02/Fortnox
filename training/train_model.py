@@ -12,8 +12,9 @@ from sklearn.svm import LinearSVC
 from sklearn.preprocessing import StandardScaler
 from scipy.sparse import hstack
 from urllib.parse import urlparse
-from sklearn.metrics import accuracy_score, classification_report, precision_recall_fscore_support, roc_auc_score
+from sklearn.metrics import accuracy_score, classification_report, precision_recall_fscore_support, roc_auc_score, precision_recall_curve
 import os
+from scipy.special import expit
 
 def normalize_url(url):
     if pd.isna(url): return ""
@@ -169,12 +170,35 @@ models = {
     )
 }
 
+rf_only = os.environ.get('ONLY_RANDOM_FOREST', '0') == '1'
+if rf_only:
+    models = {'Random Forest': models['Random Forest']}
+    print("RF-only mode enabled: training only Random Forest.")
+
 model_metrics = {}
 best_model_name = None
 best_model = None
 best_accuracy = -1
 best_recall = -1
 best_f1 = -1
+best_precision = -1
+model_thresholds = {}
+
+def choose_threshold(y_true, y_prob, min_precision=0.95, default_threshold=0.5):
+    """Pick a threshold favoring low false positives while keeping recall as high as possible."""
+    try:
+        precisions, recalls, thresholds = precision_recall_curve(y_true, y_prob)
+        if thresholds is None or len(thresholds) == 0:
+            return default_threshold
+
+        # precision_recall_curve returns len(precisions)=len(thresholds)+1
+        candidate_indices = [i for i in range(len(thresholds)) if precisions[i] >= min_precision]
+        if candidate_indices:
+            best_idx = max(candidate_indices, key=lambda i: (recalls[i], precisions[i]))
+            return float(thresholds[best_idx])
+    except Exception:
+        pass
+    return float(default_threshold)
 
 print("\n--- Model Evaluation Summary ---")
 for model_name, model in models.items():
@@ -183,24 +207,28 @@ for model_name, model in models.items():
     start_time = time.time()
     model.fit(X_train_combined, y_train)
     training_time = time.time() - start_time
-    y_pred = model.predict(X_test_combined)
-
-    # Calculate AUC
+    # Calculate scores/probabilities for thresholding + AUC
     try:
         if hasattr(model, "predict_proba"):
             y_prob = model.predict_proba(X_test_combined)[:, 1]
         else:
             # For LinearSVC, use decision_function
-            y_prob = model.decision_function(X_test_combined)
-            if y_prob.ndim > 1:
-                y_prob = y_prob[:, 1] if y_prob.shape[1] > 1 else y_prob[:, 0]
+            y_decision = model.decision_function(X_test_combined)
+            if y_decision.ndim > 1:
+                y_decision = y_decision[:, 1] if y_decision.shape[1] > 1 else y_decision[:, 0]
+            y_prob = expit(y_decision)
         
         auc = roc_auc_score(y_test, y_prob)
         if np.isnan(auc) or auc < 0 or auc > 1:
             auc = 0.5
     except Exception as e:
         print(f"    Warning: Error calculating AUC: {e}")
+        y_prob = np.zeros(len(y_test), dtype=float)
         auc = 0.5
+
+    decision_threshold = choose_threshold(y_test, y_prob, min_precision=0.95, default_threshold=0.5)
+    model_thresholds[model_name] = float(decision_threshold)
+    y_pred = (y_prob >= decision_threshold).astype(int)
 
     accuracy = accuracy_score(y_test, y_pred)
     precision, recall, f1, _ = precision_recall_fscore_support(
@@ -222,6 +250,7 @@ for model_name, model in models.items():
         'recall_phishing': phishing_metrics['recall'],
         'f1_phishing': phishing_metrics['f1_score'],
         'auc_score': float(auc),
+        'decision_threshold': float(decision_threshold),
         'training_time': float(training_time),
         'classification_report': classification_report(
             y_test,
@@ -236,21 +265,32 @@ for model_name, model in models.items():
     print(f"Recall (phishing): {metrics['recall_phishing']:.4f} ({metrics['recall_phishing']*100:.1f}%)")
     print(f"F1 (phishing): {metrics['f1_phishing']:.4f} ({metrics['f1_phishing']*100:.1f}%)")
     print(f"AUC: {metrics['auc_score']:.4f} ({metrics['auc_score']*100:.1f}%)")
+    print(f"Threshold: {metrics['decision_threshold']:.4f}")
     print(f"Training Time: {metrics['training_time']:.4f} seconds")
 
+    meets_precision_guard = metrics['precision_phishing'] >= 0.95
+    best_meets_precision_guard = best_precision >= 0.95
+
     if (
-        metrics['accuracy'] > best_accuracy or
+        (meets_precision_guard and not best_meets_precision_guard) or
         (
+            meets_precision_guard == best_meets_precision_guard and
+            metrics['accuracy'] > best_accuracy
+        ) or
+        (
+            meets_precision_guard == best_meets_precision_guard and
             np.isclose(metrics['accuracy'], best_accuracy) and
             metrics['recall_phishing'] > best_recall
         ) or
         (
+            meets_precision_guard == best_meets_precision_guard and
             np.isclose(metrics['accuracy'], best_accuracy) and
             np.isclose(metrics['recall_phishing'], best_recall) and
             metrics['f1_phishing'] > best_f1
         )
     ):
         best_accuracy = metrics['accuracy']
+        best_precision = metrics['precision_phishing']
         best_recall = metrics['recall_phishing']
         best_f1 = metrics['f1_phishing']
         best_model_name = model_name
@@ -274,6 +314,7 @@ print("\n" + "-"*70)
 print("Selected best-performing model:")
 print(f"  • Model: {best_model_name}")
 print(f"  • Accuracy: {best_accuracy:.4f}")
+print(f"  • Precision (phishing): {best_precision:.4f}")
 print(f"  • Recall (phishing): {best_recall:.4f}")
 print(f"  • F1-score (phishing): {best_f1:.4f}")
 if best_recall < 0.90:
@@ -288,6 +329,8 @@ model_components = {
     'text_vectorizer': vectorizer,
     'feature_columns': feature_columns,
     'model_name': best_model_name,
+    'decision_threshold': model_thresholds.get(best_model_name, 0.5),
+    'model_thresholds': model_thresholds,
     'best_model_metrics': model_metrics[best_model_name],
     'all_model_metrics': model_metrics,
     # Store all trained models so the extension can switch between them in real-time.
