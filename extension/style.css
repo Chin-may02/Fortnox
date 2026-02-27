@@ -575,3 +575,159 @@ button:active {
 .toggle-switch input:focus + .toggle-slider {
     box-shadow: var(--shadow-focus-ring);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Tech UI Refresh (visual-only overrides; functionality unchanged)            */
+/* -------------------------------------------------------------------------- */
+
+:root {
+    --background-main: #f7faff;
+    --background-secondary: #eef4ff;
+    --foreground-primary: #0b1220;
+    --foreground-secondary: #334155;
+    --foreground-tertiary: #64748b;
+    --accent-primary: #0056d6;
+    --accent-primary-hover: #0044aa;
+    --accent-primary-foreground: #ffffff;
+    --accent-secondary: #dbe7ff;
+    --accent-secondary-hover: #c7daff;
+    --accent-secondary-foreground: #0f254d;
+    --border-neutral: #d6e3fb;
+    --border-focus: #0056d6;
+    --shadow-small: 0 2px 6px rgba(12, 34, 75, 0.08);
+    --shadow-medium: 0 8px 22px rgba(12, 34, 75, 0.14);
+    --shadow-focus-ring: 0 0 0 3px rgba(0, 86, 214, 0.24);
+}
+
+body {
+    position: relative;
+    width: 400px;
+    background:
+        radial-gradient(circle at 15% 12%, rgba(0, 86, 214, 0.12), transparent 36%),
+        radial-gradient(circle at 88% 88%, rgba(22, 163, 74, 0.10), transparent 34%),
+        linear-gradient(180deg, #fafdff 0%, #f3f8ff 100%);
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(90, 126, 194, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(90, 126, 194, 0.07) 1px, transparent 1px);
+    background-size: 22px 22px;
+    opacity: 0.45;
+}
+
+.container {
+    position: relative;
+    z-index: 1;
+    text-align: left;
+    padding: 18px;
+}
+
+.popup-header,
+.action-section,
+.results-section,
+.details-box {
+    border-radius: 14px;
+    border: 1px solid rgba(0, 86, 214, 0.12);
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(3px);
+    box-shadow: var(--shadow-small);
+}
+
+.popup-header {
+    padding: 14px 14px 10px;
+    margin-bottom: 12px;
+}
+
+.popup-header h1 {
+    margin: 0;
+    letter-spacing: 0.8px;
+}
+
+.subtitle {
+    margin: 6px 0 0;
+    color: var(--foreground-secondary);
+    font-size: 12px;
+}
+
+.action-section,
+.results-section,
+.details-box {
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.button-grid {
+    display: grid;
+    gap: 8px;
+}
+
+button {
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+.url-display-box {
+    border-radius: 10px;
+    border: 1px solid var(--border-neutral);
+    background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+}
+
+#resultArea {
+    border-radius: 12px;
+}
+
+#analysisBreakdownSection,
+#modelInsightsSection {
+    border-left-width: 4px;
+    border-left-style: solid;
+}
+
+.token-tag {
+    border-radius: 999px;
+    padding: 4px 9px;
+    background: linear-gradient(180deg, #ffffff 0%, #e9f1ff 100%);
+    border-color: #c5d9ff;
+    color: #12366f;
+}
+
+.model-card {
+    background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+    border: 1px solid #d0def8;
+    border-radius: 12px;
+}
+
+.model-card-active {
+    border-color: #0056d6;
+    box-shadow: 0 8px 20px rgba(0, 86, 214, 0.2);
+}
+
+#resultArea.safe {
+    background: linear-gradient(180deg, #e9f9ef 0%, #dff5e7 100%);
+    border-color: #16a34a;
+}
+
+#resultArea.phishing,
+#resultArea.malware {
+    background: linear-gradient(180deg, #7f1d1d 0%, #6b1616 100%);
+    border-color: #450a0a;
+}
+
+.risk-pill.risk-high {
+    background: #7f1d1d;
+}
+
+.progress-bar-background {
+    height: 13px;
+}
+
+.progress-bar-safe,
+.progress-bar-phishing,
+.progress-bar-warning {
+    border-radius: 8px;
+}
