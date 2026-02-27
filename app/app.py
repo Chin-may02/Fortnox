@@ -96,7 +96,7 @@ def extract_url_features(url):
     return features
 
 MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_FILE = '../models/final_phishing_model.joblib'
+MODEL_FILE = os.environ.get('MODEL_FILE', '../models/Phishing_final.joblib')
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_FILE)
 
 model_components = None
@@ -181,178 +181,6 @@ def predict_single_url(url, components, requested_model_name=None):
 
     return int(prediction), probabilities.tolist(), tokens, active_model_name
 
-def is_whitelisted_domain(url):
-    """Check if the URL belongs to a whitelisted legitimate domain (banks, educational institutions, government organizations)."""
-    try:
-        # Ensure URL has protocol for parsing
-        if not url.startswith(('http://', 'https://')):
-            url = 'http://' + url
-        
-        parsed = urlparse(url)
-        domain = parsed.netloc.lower() if parsed.netloc else url.lower()
-        
-        # Remove www. prefix and any port numbers
-        domain = domain.replace('www.', '')
-        if ':' in domain:
-            domain = domain.split(':')[0]
-        
-        # Whitelist of legitimate bank domains and trusted institutions
-        whitelisted_domains = [
-            # International Educational Institutions (Major Universities)
-            'harvard.edu',
-            'mit.edu',
-            'stanford.edu',
-            'yale.edu',
-            'princeton.edu',
-            'columbia.edu',
-            'cornell.edu',
-            'berkeley.edu',
-            'ucla.edu',
-            'usc.edu',
-            'nyu.edu',
-            'uchicago.edu',
-            'northwestern.edu',
-            'duke.edu',
-            'upenn.edu',
-            'brown.edu',
-            'dartmouth.edu',
-            'caltech.edu',
-            'cmu.edu',
-            'georgetown.edu',
-            'virginia.edu',
-            'umich.edu',
-            'utexas.edu',
-            'wisc.edu',
-            'illinois.edu',
-            'gatech.edu',
-            'purdue.edu',
-            'osu.edu',
-            'psu.edu',
-            'ox.ac.uk',  # Oxford
-            'cam.ac.uk',  # Cambridge
-            'imperial.ac.uk',  # Imperial College
-            'ucl.ac.uk',  # University College London
-            'lse.ac.uk',  # London School of Economics
-            'kcl.ac.uk',  # King's College London
-            'ed.ac.uk',  # University of Edinburgh
-            'manchester.ac.uk',  # University of Manchester
-            'nus.edu.sg',  # National University of Singapore
-            'ntu.edu.sg',  # Nanyang Technological University
-            'unsw.edu.au',  # University of New South Wales
-            'sydney.edu.au',  # University of Sydney
-            'unimelb.edu.au',  # University of Melbourne
-            'anu.edu.au',  # Australian National University
-            'utoronto.ca',  # University of Toronto
-            'ubc.ca',  # University of British Columbia
-            'mcgill.ca',  # McGill University
-            'tsinghua.edu.cn',  # Tsinghua University
-            'pku.edu.cn',  # Peking University
-            'nus.edu.sg',  # National University of Singapore
-            'ntu.edu.sg',  # Nanyang Technological University
-            
-            # Indian Banks (Public & Private)
-            'sbi.co.in',
-            'onlinesbi.com',
-            'hdfcbank.com',
-            'icicibank.com',
-            'axisbank.com',
-            'kotak.com',
-            'indusind.com',
-            'yesbank.in',
-            'bankofbaroda.in',
-            'pnbindia.in',
-            'canarabank.com',
-            'unionbankofindia.co.in',
-            'idbibank.in',
-            'centralbankofindia.co.in',
-            'iob.in',
-            'ucobank.com',
-            'bankofindia.co.in',
-            'rbi.org.in',
-
-            # Indian Government & Public Sector
-            'gov.in',
-            'nic.in',
-            'india.gov.in',
-            'uidai.gov.in',        # Aadhaar
-            'incometax.gov.in',
-            'gst.gov.in',
-            'digilocker.gov.in',
-            'mygov.in',
-            'parivahan.gov.in',
-            'passportindia.gov.in',
-            'epfindia.gov.in',
-            'esic.gov.in',
-            'mca.gov.in',
-            'niti.gov.in',
-            'meity.gov.in',
-            'mospi.gov.in',
-            'irctc.co.in',
-
-            # Indian Educational Institutions (Central / State / IIT / NIT)
-            'edu.in',
-            'ac.in',
-            'ugc.ac.in',
-            'aicte-india.org',
-            'nta.ac.in',
-
-            # IITs
-            'iitb.ac.in',
-            'iitd.ac.in',
-            'iitm.ac.in',
-            'iitk.ac.in',
-            'iitkgp.ac.in',
-            'iitr.ac.in',
-            'iitg.ac.in',
-            'iith.ac.in',
-            'iiti.ac.in',
-
-            # NITs
-            'nitk.ac.in',
-            'nitrkl.ac.in',
-            'nitw.ac.in',
-            'nitt.edu',
-            'nits.ac.in',
-            'nitc.ac.in',
-
-            # Major Indian Universities
-            'du.ac.in',
-            'jnu.ac.in',
-            'uohyd.ac.in',
-            'bhu.ac.in',
-            'jamiahamdard.edu',
-            'jamia.edu',
-            'amu.ac.in',
-            'annauniv.edu',
-            'vit.ac.in',
-            'manipal.edu',
-            'bits-pilani.ac.in',
-        ]
-        
-        # Check if domain ends with .gov.my (all Malaysian government domains)
-        if domain.endswith('.gov.in') or domain.endswith('.nic.in') or domain == 'gov.in':
-            return True
-
-        # All Indian educational institutions
-        if domain.endswith('.ac.in') or domain.endswith('.edu.in'):
-            return True
-        
-        # Check if domain matches any whitelisted domain exactly or is a subdomain
-        for whitelisted in whitelisted_domains:
-            if domain == whitelisted:
-                return True
-            # Check if domain is a subdomain of whitelisted (e.g., www.maybank2u.com.my -> maybank2u.com.my)
-            if domain.endswith('.' + whitelisted):
-                return True
-            # Also check if whitelisted is a subdomain of domain (shouldn't happen but be safe)
-            if whitelisted.endswith('.' + domain):
-                return True
-        
-        return False
-    except Exception as e:
-        print(f"Error in whitelist check: {e}")
-        return False
-
 @app.route('/check_url', methods=['POST'])
 def check_url():
     data = request.get_json()
@@ -363,63 +191,27 @@ def check_url():
     if not url_to_check:
         return jsonify({'error': 'URL cannot be empty'}), 400
 
-    # Check if whitelisted
-    is_whitelisted = is_whitelisted_domain(url_to_check)
-    
-    # Always run model prediction to get varied probabilities
+    # Always run model prediction only (no whitelist overrides).
     requested_model_name = data.get('modelName')
     prediction, probabilities, tokens, used_model_name = predict_single_url(
         url_to_check,
         model_components,
         requested_model_name
     )
-    
-    # If whitelisted, override prediction to safe but keep actual model probabilities for variety
-    if is_whitelisted:
-        prediction = 0  # Force safe classification
-        prediction_label = "safe"
+
+    prediction_label = "phishing" if prediction == 1 else "safe"
+    risk_score = float(probabilities[1])
+    risk_score = max(0.0, min(1.0, risk_score))
+
+    if prediction_label == "safe":
         risk_level = "Low Risk"
-        message = "This URL belongs to a verified legitimate domain."
-        
-        # Generate unique confidence percentages based on URL hash for each website
-        # This ensures different URLs get different, consistent confidence percentages (88-98% range)
-        import hashlib
-        
-        # Create a hash from the normalized domain for consistent results
-        normalized_url = normalize_url(url_to_check)
-        url_hash = int(hashlib.md5(normalized_url.encode()).hexdigest()[:8], 16)
-        
-        # Generate a unique percentage between 88.0% and 97.9% with 0.1% increments
-        # This gives us 100 possible unique values (88.0, 88.1, 88.2, ..., 97.9)
-        hash_mod = url_hash % 100  # 0 to 99
-        base_percentage = 88.0 + (hash_mod / 10.0)  # 88.0 to 97.9 in 0.1% steps
-        
-        # Add fine-grained variation using second part of hash for 0.01% precision
-        fine_hash = int(hashlib.md5(normalized_url.encode()).hexdigest()[8:12], 16)
-        fine_variation = (fine_hash % 10) / 100.0  # 0.00 to 0.09 (0.00% to 0.09%)
-        
-        # Final safe probability: 88.00% to 97.99%
-        safe_prob = min(0.9799, base_percentage / 100.0 + fine_variation)
-        safe_prob = max(0.88, safe_prob)  # Ensure minimum 88%
-        
-        phishing_prob = 1.0 - safe_prob
-        probabilities = [safe_prob, phishing_prob]
-        risk_score = phishing_prob  # Phishing probability (low for whitelisted)
+        message = "This URL appears to be safe."
+    elif risk_score >= 0.50:
+        risk_level = "High Risk"
+        message = "High risk detected - site likely phishing or vulnerable."
     else:
-        prediction_label = "phishing" if prediction == 1 else "safe"
-        risk_score = float(probabilities[1])
-        risk_score = max(0.0, min(1.0, risk_score))
-        
-        # If the model predicts safe, set risk level but keep actual probabilities
-        if prediction_label == "safe":
-            risk_level = "Low Risk"
-            message = "This URL appears to be safe."
-        elif risk_score >= 0.50:
-            risk_level = "High Risk"
-            message = "High risk detected — site likely phishing or vulnerable."
-        else:
-            risk_level = "Low Risk"
-            message = "Low risk detected — site appears safer."
+        risk_level = "Low Risk"
+        message = "Low risk detected - site appears safer."
     
     # Build response payload
     response_payload = {
@@ -435,28 +227,20 @@ def check_url():
     
     # Include model metrics and comparisons for UI display
     if model_components is not None:
-        # Get the active model name
-        classifier = model_components.get('classifier')
-        active_model_name = classifier.__class__.__name__ if classifier else 'Linear SVM'
-        # Normalize model name to match frontend expectations
-        if active_model_name == 'LinearSVC':
-            active_model_name = 'Linear SVM'
-        
+        active_model_name = used_model_name or model_components.get('model_name') or 'Linear SVM'
         response_payload['modelName'] = active_model_name
-        
-        # Include modelMetrics (for active model display)
-        best_metrics = model_components.get('best_model_metrics', {})
-        normalized_best_metrics = {
-            'accuracy': float(best_metrics.get('accuracy', 0)),
-            'recall_phishing': float(best_metrics.get('recall_phishing', 0)),
-            'f1_phishing': float(best_metrics.get('f1_phishing', 0)),
-            'precision_phishing': float(best_metrics.get('precision_phishing', 0)),
-            'auc': float(best_metrics.get('auc_score', 0))
-        }
-        response_payload['modelMetrics'] = normalized_best_metrics
-        
-        # Include modelComparisons (for comparison grid)
+
         all_model_metrics = model_components.get('all_model_metrics', {})
+        selected_metrics = all_model_metrics.get(active_model_name) or model_components.get('best_model_metrics', {})
+        normalized_selected_metrics = {
+            'accuracy': float(selected_metrics.get('accuracy', 0)),
+            'recall_phishing': float(selected_metrics.get('recall_phishing', 0)),
+            'f1_phishing': float(selected_metrics.get('f1_phishing', 0)),
+            'precision_phishing': float(selected_metrics.get('precision_phishing', 0)),
+            'auc': float(selected_metrics.get('auc_score', 0))
+        }
+        response_payload['modelMetrics'] = normalized_selected_metrics
+
         model_comparisons = {}
         for model_name, metrics in all_model_metrics.items():
             model_comparisons[model_name] = {
