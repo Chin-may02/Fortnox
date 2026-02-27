@@ -1,5 +1,0 @@
-Model,Accuracy (%),Precision,Recall,F1-Score,Time (s)
-Linear SVM,96.24,0.8895,0.9504,0.9189,147.4605
-Logistic Regression,95.93,0.8807,0.9469,0.9126,1087.8730
-Random Forest,96.99,0.9654,0.8979,0.9304,4881.0278
-XGBoost,92.63,0.8215,0.8580,0.8393,128.7509

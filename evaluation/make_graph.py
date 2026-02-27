@@ -5,10 +5,12 @@ Reads metrics directly from the saved model file.
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 # Load model file to get current metrics
 print("Loading model file...")
-model_data = joblib.load('../models/final_phishing_model.joblib')
+model_file = os.environ.get('MODEL_FILE', '../models/final_phishing_model.joblib')
+model_data = joblib.load(model_file)
 all_model_metrics = model_data.get('all_model_metrics', {})
 
 # Define model order (matching your current setup)
