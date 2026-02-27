@@ -1,4 +1,4 @@
-
+﻿
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     (async () => {
         if (request.action === "getPageDetails") {
@@ -63,8 +63,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Track scanned URLs per tab to avoid duplicate scans in same session
 const scannedTabs = new Map();
+// Track in-flight scans to avoid duplicate concurrent requests
+const scanningTabs = new Map();
 // Track blocked URLs to prevent re-scanning
 const blockedUrls = new Set();
+const BYPASS_MARKER = '#fortnox-allow';
+
+function hasBypassMarker(url) {
+    return typeof url === 'string' && url.includes(BYPASS_MARKER);
+}
 
 // Auto-scan function
 async function autoScanUrl(tabId, url) {
@@ -74,9 +81,20 @@ async function autoScanUrl(tabId, url) {
         return;
     }
 
+    // One-time user bypass from blocked page
+    if (hasBypassMarker(url)) {
+        console.log(`[AUTO-SCAN] User bypass marker found. Skipping scan once: ${url}`);
+        return;
+    }
+
     // Skip if already scanned for this tab
     if (scannedTabs.get(tabId) === url) {
         console.log(`[AUTO-SCAN] Already scanned this URL for tab ${tabId}: ${url}`);
+        return;
+    }
+
+    // Skip if same URL is already being scanned
+    if (scanningTabs.get(tabId) === url) {
         return;
     }
 
@@ -95,7 +113,8 @@ async function autoScanUrl(tabId, url) {
     }
 
     try {
-        console.log(`[AUTO-SCAN] 🔍 Scanning URL: ${url}`);
+        scanningTabs.set(tabId, url);
+        console.log(`[AUTO-SCAN] ðŸ” Scanning URL: ${url}`);
         const response = await fetch('http://127.0.0.1:5000/check_url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -103,7 +122,7 @@ async function autoScanUrl(tabId, url) {
         });
 
         if (!response.ok) {
-            console.warn(`[AUTO-SCAN] ⚠️ Server error for ${url}: ${response.status}`);
+            console.warn(`[AUTO-SCAN] âš ï¸ Server error for ${url}: ${response.status}`);
             console.warn(`[AUTO-SCAN] Make sure Flask server is running: python app.py`);
             return;
         }
@@ -111,25 +130,29 @@ async function autoScanUrl(tabId, url) {
         const data = await response.json();
         scannedTabs.set(tabId, url); // Mark as scanned
 
-        // Show warning and BLOCK if phishing or high risk detected
-        const isPhishing = data.prediction === "phishing";
-        const isHighRisk = data.riskLevel && (data.riskLevel.includes("High Risk") || data.riskLevel.includes("High"));
-        
-        if (isPhishing || isHighRisk) {
-            console.log(`[AUTO-SCAN] 🚨 THREAT DETECTED - BLOCKING: ${url}`);
+        // Graduated response to reduce false-positive hard blocks.
+        const phishingProbRaw = (typeof data.riskScore === 'number') ? data.riskScore : (data.probabilities?.[1] || 0);
+        const phishingProbModel = Math.max(0, Math.min(1, phishingProbRaw));
+        const hardBlockThreshold = 0.85;
+        const warningThreshold = 0.60;
+        const shouldHardBlock = phishingProbModel >= hardBlockThreshold;
+        const shouldWarn = phishingProbModel >= warningThreshold || data.prediction === "phishing";
+
+        if (shouldHardBlock) {
+            console.log(`[AUTO-SCAN] THREAT DETECTED - BLOCKING: ${url}`);
             console.log(`[AUTO-SCAN] Risk Level: ${data.riskLevel || data.prediction}`);
             console.log(`[AUTO-SCAN] Probabilities: Safe=${((data.probabilities?.[0] || 0) * 100).toFixed(1)}%, Phishing=${((data.probabilities?.[1] || 0) * 100).toFixed(1)}%`);
-            
+
             // Mark as blocked
             blockedUrls.add(url);
-            
-            // Block the page by redirecting to a blocked page with warning
+
+            // Hard block only for high-confidence phishing
             try {
                 // Generate detailed risk explanation
                 const riskScore = ((data.riskScore || data.probabilities?.[1] || 0) * 100).toFixed(1);
                 const safeProb = ((data.probabilities?.[0] || 0) * 100).toFixed(1);
                 const phishingProb = ((data.probabilities?.[1] || 0) * 100).toFixed(1);
-                
+
                 let riskReasons = [];
                 if (data.riskScore >= 0.7) {
                     riskReasons.push('Very high phishing probability detected (' + riskScore + '%)');
@@ -150,10 +173,10 @@ async function autoScanUrl(tabId, url) {
                     riskReasons.push('High risk score from machine learning analysis');
                     riskReasons.push('URL features match known phishing patterns');
                 }
-                
+
                 const reasonsHtml = riskReasons.map(reason => `<li>${reason}</li>`).join('');
                 const modelAccuracy = data.modelMetrics?.accuracy ? (data.modelMetrics.accuracy * 100).toFixed(1) + '%' : 'High';
-                
+
                 // Create a data URL with the blocked page HTML
                 const blockedPageHtml = `
 <!DOCTYPE html>
@@ -266,9 +289,9 @@ async function autoScanUrl(tabId, url) {
         <div class="warning-icon">🚨</div>
         <h1>Threat Detected!</h1>
         <p><strong>This website has been blocked for your protection.</strong></p>
-        
+
         <div class="url-display">${url}</div>
-        
+
         <div class="stats">
             <div class="stat-item">
                 <div class="stat-value">${riskScore}%</div>
@@ -283,7 +306,7 @@ async function autoScanUrl(tabId, url) {
                 <div class="stat-label">Safe Probability</div>
             </div>
         </div>
-        
+
         <div class="risk-box">
             <h2>Why was this site blocked?</h2>
             <p>Our AI-powered phishing detection system analyzed this website and identified the following risk factors:</p>
@@ -293,12 +316,12 @@ async function autoScanUrl(tabId, url) {
             <p style="margin-top: 20px;"><strong>Risk Level:</strong> ${data.riskLevel || 'High Risk'}</p>
             <p><strong>Model Confidence:</strong> ${modelAccuracy}</p>
         </div>
-        
+
         <div style="margin-top: 30px;">
-            <p><strong>⚠️ It is strongly advised NOT to proceed to this website.</strong></p>
+            <p><strong>It is strongly advised NOT to proceed to this website.</strong></p>
             <p>This site may attempt to steal your personal information, login credentials, or financial details.</p>
         </div>
-        
+
         <div style="margin-top: 30px;">
             <button onclick="window.history.back()">Go Back to Safety</button>
             <button onclick="window.location.href='https://www.google.com'">Go to Google</button>
@@ -306,16 +329,16 @@ async function autoScanUrl(tabId, url) {
     </div>
 </body>
 </html>`;
-                
-                const blockedPageUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(blockedPageHtml);
-                
+
+                const blockedPageUrl = `chrome-extension://${chrome.runtime.id}/blocked.html?target=${encodeURIComponent(url)}`;
+
                 // Redirect the tab to the blocked page
                 chrome.tabs.update(tabId, { url: blockedPageUrl }, () => {
-                    console.log(`[AUTO-SCAN] ✅ Successfully blocked and redirected tab ${tabId}`);
+                    console.log(`[AUTO-SCAN] Successfully blocked and redirected tab ${tabId}`);
                 });
-                
+
             } catch (error) {
-                console.error(`[AUTO-SCAN] ❌ Error blocking URL: ${error.message}`);
+                console.error(`[AUTO-SCAN] Error blocking URL: ${error.message}`);
                 // Fallback: try to send warning overlay
                 setTimeout(() => {
                     chrome.tabs.sendMessage(tabId, {
@@ -328,19 +351,34 @@ async function autoScanUrl(tabId, url) {
                     }).catch(e => console.warn(`[AUTO-SCAN] Could not send warning: ${e.message}`));
                 }, 1000);
             }
+        } else if (shouldWarn) {
+            console.log(`[AUTO-SCAN] Warning only (no hard block): ${url}`);
+            blockedUrls.delete(url);
+            chrome.tabs.sendMessage(tabId, {
+                action: "showWarning",
+                details: {
+                    url: url,
+                    classification: data.prediction || "phishing",
+                    siteType: "this page"
+                }
+            }).catch(e => console.warn(`[AUTO-SCAN] Could not send warning: ${e.message}`));
         } else {
-            console.log(`[AUTO-SCAN] ✅ URL is safe: ${url} (Risk: ${data.riskLevel || 'Low'})`);
+            console.log(`[AUTO-SCAN] âœ… URL is safe: ${url} (Risk: ${data.riskLevel || 'Low'})`);
             // Remove from blocked list if it was previously blocked
             blockedUrls.delete(url);
         }
     } catch (error) {
-        console.error(`[AUTO-SCAN] ❌ Error scanning ${url}: ${error.message}`);
+        console.error(`[AUTO-SCAN] âŒ Error scanning ${url}: ${error.message}`);
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('ERR_CONNECTION_REFUSED')) {
-            console.error(`[AUTO-SCAN] 💡 Flask server is not running!`);
-            console.error(`[AUTO-SCAN] 💡 To start the server, run: python app.py`);
-            console.error(`[AUTO-SCAN] 💡 The server should be running on: http://127.0.0.1:5000`);
+            console.error(`[AUTO-SCAN] ðŸ’¡ Flask server is not running!`);
+            console.error(`[AUTO-SCAN] ðŸ’¡ To start the server, run: python app.py`);
+            console.error(`[AUTO-SCAN] ðŸ’¡ The server should be running on: http://127.0.0.1:5000`);
             // Don't mark as scanned if server is down, so it can retry later
             scannedTabs.delete(tabId);
+        }
+    } finally {
+        if (scanningTabs.get(tabId) === url) {
+            scanningTabs.delete(tabId);
         }
     }
 }
@@ -351,13 +389,20 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     if (details.frameId === 0 && details.url && details.url.startsWith('http')) {
         const url = details.url;
         const tabId = details.tabId;
+
+        // Explicit user bypass for this navigation
+        if (hasBypassMarker(url)) {
+            console.log(`[AUTO-SCAN] One-time bypass allowed for: ${url}`);
+            blockedUrls.delete(url.replace(BYPASS_MARKER, ''));
+            return;
+        }
         
         // Skip if already blocked
         if (blockedUrls.has(url)) {
-            console.log(`[AUTO-SCAN] 🚫 URL already blocked, preventing navigation: ${url}`);
-            chrome.tabs.update(tabId, { url: 'chrome-extension://' + chrome.runtime.id + '/blocked.html' }).catch(() => {
+            console.log(`[AUTO-SCAN] ðŸš« URL already blocked, preventing navigation: ${url}`);
+            chrome.tabs.update(tabId, { url: 'chrome-extension://' + chrome.runtime.id + '/blocked.html?target=' + encodeURIComponent(url) }).catch(() => {
                 // If blocked.html doesn't exist, use data URL
-                const blockedMsg = `data:text/html,<html><body style="background:#991b1b;color:white;text-align:center;padding:50px;font-family:Arial"><h1>🚨 Blocked</h1><p>This site was previously identified as high risk.</p><button onclick="history.back()" style="padding:10px 20px;font-size:16px">Go Back</button></body></html>`;
+                const blockedMsg = `data:text/html,<html><body style="background:#991b1b;color:white;text-align:center;padding:50px;font-family:Arial"><h1>Blocked</h1><p>This site was previously identified as high risk.</p><button onclick="history.back()" style="padding:10px 20px;font-size:16px">Go Back</button><button onclick="if(confirm('Proceed to blocked site?'))location.href=decodeURIComponent('${encodeURIComponent(url)}')" style="padding:10px 20px;font-size:16px;margin-left:10px">Continue Anyway</button></body></html>`;
                 chrome.tabs.update(tabId, { url: blockedMsg });
             });
             return;
@@ -371,7 +416,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
             }
             
             // Start scanning immediately (before page loads)
-            console.log(`[AUTO-SCAN] 🔍 Pre-scanning URL (before load): ${url}`);
+            console.log(`[AUTO-SCAN] ðŸ” Pre-scanning URL (before load): ${url}`);
             autoScanUrl(tabId, url);
         });
     }
@@ -381,14 +426,14 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     // Only scan when page is fully loaded and has a valid URL
     if (changeInfo.status === 'complete' && tab.url && tab.url.startsWith('http')) {
+        if (hasBypassMarker(tab.url)) {
+            return;
+        }
         // Skip if already scanned or blocked
         const lastScannedUrl = scannedTabs.get(tabId);
         if (lastScannedUrl !== tab.url && !blockedUrls.has(tab.url)) {
             console.log(`[AUTO-SCAN] Tab ${tabId} updated: ${tab.url}`);
-            // Small delay to ensure page is fully loaded
-            setTimeout(() => {
-                autoScanUrl(tabId, tab.url);
-            }, 1000);
+            autoScanUrl(tabId, tab.url);
         }
     }
 });
@@ -401,9 +446,9 @@ chrome.tabs.onCreated.addListener((tab) => {
         chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo, updatedTab) {
             if (tabId === tab.id && changeInfo.status === 'complete' && updatedTab.url) {
                 chrome.tabs.onUpdated.removeListener(listener);
-                setTimeout(() => {
+                if (!hasBypassMarker(updatedTab.url)) {
                     autoScanUrl(tabId, updatedTab.url);
-                }, 1000);
+                }
             }
         });
     }
@@ -412,6 +457,7 @@ chrome.tabs.onCreated.addListener((tab) => {
 // Clean up when tabs are closed
 chrome.tabs.onRemoved.addListener((tabId) => {
     scannedTabs.delete(tabId);
+    scanningTabs.delete(tabId);
 });
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -423,3 +469,4 @@ chrome.runtime.onInstalled.addListener(() => {
         }
     });
 });
+

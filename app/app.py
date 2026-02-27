@@ -96,7 +96,7 @@ def extract_url_features(url):
     return features
 
 MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_FILE = os.environ.get('MODEL_FILE', '../models/Phishing_final.joblib')
+MODEL_FILE = os.environ.get('MODEL_FILE', '../models/final_phishing_model.joblib')
 MODEL_PATH = os.path.join(MODEL_DIR, MODEL_FILE)
 
 model_components = None
@@ -147,7 +147,9 @@ def predict_single_url(url, components, requested_model_name=None):
     
     combined_features = hstack([numerical_features, text_features])
     
-    prediction = classifier.predict(combined_features)[0]
+    model_thresholds = components.get('model_thresholds') or {}
+    decision_threshold = float(model_thresholds.get(active_model_name, components.get('decision_threshold', 0.5)))
+    decision_threshold = max(0.05, min(0.99, decision_threshold))
 
     # Get probabilities - always use actual model probabilities for live display
     try:
@@ -172,14 +174,17 @@ def predict_single_url(url, components, requested_model_name=None):
             probabilities = probabilities / probabilities.sum()  # Normalize to sum to 1
         else:
             # Fallback: use prediction directly but still show some probability
-            if prediction == 1:
+            raw_prediction = classifier.predict(combined_features)[0]
+            if raw_prediction == 1:
                 probabilities = np.array([0.1, 0.9], dtype=float)  # Phishing with some uncertainty
             else:
                 probabilities = np.array([0.9, 0.1], dtype=float)  # Safe with some uncertainty
 
+    phishing_prob = float(probabilities[1]) if len(probabilities) > 1 else 1.0
+    prediction = 1 if phishing_prob >= decision_threshold else 0
     tokens = text_vectorizer.build_analyzer()(normalized_url)
 
-    return int(prediction), probabilities.tolist(), tokens, active_model_name
+    return int(prediction), probabilities.tolist(), tokens, active_model_name, decision_threshold
 
 @app.route('/check_url', methods=['POST'])
 def check_url():
@@ -193,7 +198,7 @@ def check_url():
 
     # Always run model prediction only (no whitelist overrides).
     requested_model_name = data.get('modelName')
-    prediction, probabilities, tokens, used_model_name = predict_single_url(
+    prediction, probabilities, tokens, used_model_name, decision_threshold = predict_single_url(
         url_to_check,
         model_components,
         requested_model_name
@@ -222,7 +227,8 @@ def check_url():
         'tokens': tokens[:20] if tokens else [],
         'riskLevel': risk_level,
         'riskScore': risk_score,
-        'riskDescription': message
+        'riskDescription': message,
+        'decisionThreshold': float(decision_threshold)
     }
     
     # Include model metrics and comparisons for UI display
