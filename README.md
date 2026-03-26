@@ -1,30 +1,36 @@
 # FORTNOX
 
-FORTNOX is a phishing URL detection project built with:
-- A Flask backend API for model inference
-- A Chrome extension UI
-- A machine learning training and evaluation pipeline
+FORTNOX is a comprehensive security detection project built with:
+- A Flask backend API for URL phishing detection
+- A Chrome extension UI for real-time URL scanning
+- An MCP-based email classification system
+- Machine learning training and evaluation pipelines
 
-The system classifies URLs as `safe` or `phishing`, returns risk/confidence values, and exposes model metrics for reporting.
+The system provides:
+- **URL Classification**: Classifies URLs as `safe` or `phishing`
+- **Email Classification**: Classifies emails as `legitimate`, `spam`, `phishing`, or `malicious`
+- Risk/confidence scores and detailed model metrics
 
 ## Project Structure
 
-- `app/`  
-  Flask API (`app.py`) and API tests.
-- `training/`  
-  Model training script (`train_model.py`) and model selection logic.
-- `evaluation/`  
+- `app/`
+  Flask API (`app.py`) for URL phishing detection and API tests.
+- `training/`
+  Model training script (`train_model.py`) for URL classification.
+- `evaluation/`
   Scripts to generate report tables and graphs from saved model metrics.
-- `extension/`  
+- `extension/`
   Chrome extension files (popup, background, content scripts, manifest).
-- `data/`  
-  Dataset files (`phishing_site_urls.csv`, `phishing_site_urls_cleaned.csv`).
-- `models/`  
-  Active model artifact and backups.
-- `reports/`  
+- `mcp_server/`
+  **NEW**: MCP-based email classification system (server, classifier, training, CLI).
+- `data/`
+  Dataset files for both URL and email classification.
+- `models/`
+  Active model artifacts (URL and email classifiers).
+- `reports/`
   Generated report outputs (`performance_summary.*`, graph image).
-- `tests/`  
-  Validation and stress test scripts.
+- `tests/`
+  Validation and stress tests for both URL and email classification.
 
 ## How It Works
 
@@ -104,9 +110,67 @@ This updates:
 - Input validation test: `tests/validation_test.py`
 - Stress test: `tests/stress_test.py`
 
+## Email Classification System (MCP-Based)
+
+**NEW**: FORTNOX now includes an MCP-based email classification system!
+
+### Quick Start
+
+1. **Train the email model:**
+```bash
+cd mcp_server
+python train_email_model.py
+```
+
+2. **Classify emails via CLI:**
+```bash
+cd mcp_server
+python classify_email_cli.py \
+  --subject "Your subject here" \
+  --body "Email body content" \
+  --sender "sender@example.com"
+```
+
+3. **Run the MCP server:**
+```bash
+cd mcp_server
+python email_classifier_server.py
+```
+
+4. **Try the example client:**
+```bash
+cd mcp_server
+python client_example.py
+```
+
+### Features
+
+The email classifier detects:
+- **Phishing**: Credential theft attempts, account verification scams
+- **Spam**: Unsolicited bulk emails, promotional content
+- **Malicious**: Malware, ransomware, Bitcoin scams
+- **Legitimate**: Normal, safe emails
+
+### Documentation
+
+See [`mcp_server/README.md`](mcp_server/README.md) for complete documentation including:
+- MCP protocol details
+- Feature extraction (30+ features)
+- Training your own models
+- Integration examples
+- API reference
+
+### Testing
+
+Run email classification tests:
+```bash
+python tests/test_email_classifier.py
+```
+
 ## Current Important Notes
 
-- Keep training and inference feature logic aligned (`training/train_model.py` and `app/app.py`).
+- Keep training and inference feature logic aligned (`training/train_model.py` and `app/app.py` for URLs; `mcp_server/train_email_model.py` and `mcp_server/email_classifier.py` for emails).
 - Back up model artifacts before retraining to avoid accidental overwrite.
 - Reporting scripts read metrics from the current saved model, so stale model files produce stale reports.
+- The email classifier works with rule-based classification out of the box, but training a model improves accuracy significantly.
 
