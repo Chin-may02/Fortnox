@@ -112,7 +112,7 @@ except Exception as e:
 def predict_single_url(url, components, requested_model_name=None):
     """Prepares features and predicts a single URL using the selected model."""
     if components is None:
-        return 1, [0.0, 1.0], ["model", "not", "loaded"], None
+        return 1, [0.0, 1.0], ["model", "not", "loaded"], None, 0.5
 
     # Default to the primary classifier
     classifier = components.get('classifier')
@@ -130,7 +130,7 @@ def predict_single_url(url, components, requested_model_name=None):
     feature_columns = components.get('feature_columns')
 
     if classifier is None or numerical_scaler is None or text_vectorizer is None or feature_columns is None:
-        return 1, [0.0, 1.0], ["model", "not", "available"], active_model_name
+        return 1, [0.0, 1.0], ["model", "not", "available"], active_model_name, 0.5
 
     features_dict = extract_url_features(url)
     feature_df = pd.DataFrame([features_dict])
@@ -193,8 +193,8 @@ def check_url():
         return jsonify({'error': 'No URL provided or invalid format'}), 400
     
     url_to_check = data.get('url', '')
-    if not url_to_check:
-        return jsonify({'error': 'URL cannot be empty'}), 400
+    if not isinstance(url_to_check, str) or not url_to_check.strip():
+        return jsonify({'error': 'URL must be a non-empty string'}), 400
 
     # Always run model prediction only (no whitelist overrides).
     requested_model_name = data.get('modelName')
@@ -264,4 +264,4 @@ if __name__ == '__main__':
     if model_components is None:
         print("\nWARNING: Server is starting WITHOUT a loaded model. Predictions will fail.")
     print("\nFlask server is running. Ready to receive requests.")
-    app.run(debug=True, port=5000)
+    app.run(debug=os.environ.get('FLASK_DEBUG', '0') == '1', port=5000)

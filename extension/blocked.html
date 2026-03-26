@@ -133,6 +133,11 @@
         .btn-secondary:hover {
             background: var(--btn-ghost-hover);
         }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -148,53 +153,11 @@
         </section>
 
         <div class="actions">
-            <button id="goBackBtn" class="btn-primary" type="button">Go Back</button>
+            <button id="goBackBtn" class="btn-primary" type="button">Go Back To Safety</button>
             <button id="continueBtn" class="btn-secondary" type="button">Do you still want to continue?</button>
             <button id="closeTabBtn" class="btn-secondary" type="button">Close Tab</button>
         </div>
     </main>
-
-    <script>
-        const target = new URLSearchParams(window.location.search).get('target') || '';
-        const blockedTarget = document.getElementById('blockedTarget');
-        const continueBtn = document.getElementById('continueBtn');
-
-        if (target) {
-            blockedTarget.textContent = `Blocked URL: ${target}`;
-        } else {
-            blockedTarget.textContent = 'Blocked URL: unavailable';
-            continueBtn.disabled = true;
-            continueBtn.style.opacity = '0.6';
-            continueBtn.style.cursor = 'not-allowed';
-        }
-
-        document.getElementById('goBackBtn').addEventListener('click', () => {
-            if (window.history.length > 1) {
-                window.history.back();
-            } else {
-                window.location.href = 'chrome://newtab/';
-            }
-        });
-
-        continueBtn.addEventListener('click', () => {
-            if (!target) return;
-            const ok = window.confirm(
-                'This site was flagged as high risk. Continue only if you trust it. Do you still want to proceed?'
-            );
-            if (ok) {
-                try {
-                    const u = new URL(target);
-                    u.hash = 'fortnox-allow';
-                    window.location.href = u.toString();
-                } catch (e) {
-                    window.location.href = `${target}#fortnox-allow`;
-                }
-            }
-        });
-
-        document.getElementById('closeTabBtn').addEventListener('click', () => {
-            window.close();
-        });
-    </script>
+    <script src="blocked.js"></script>
 </body>
 </html>
