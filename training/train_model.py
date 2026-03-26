@@ -89,9 +89,11 @@ def extract_url_features(url):
 
     return features
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 try:
     print("Attempting to load CLEANED dataset: 'phishing_site_urls_cleaned.csv'")
-    df = pd.read_csv('../data/phishing_site_urls_cleaned.csv')
+    df = pd.read_csv(os.path.join(SCRIPT_DIR, '..', 'data', 'phishing_site_urls_cleaned.csv'))
     print(f"✓ Cleaned dataset loaded successfully: {len(df)} rows")
 except FileNotFoundError:
     print("\nFATAL ERROR: 'phishing_site_urls_cleaned.csv' not found.")
@@ -165,8 +167,7 @@ models = {
         colsample_bytree=0.9,
         scale_pos_weight=3,
         eval_metric='logloss',
-        random_state=42,
-        use_label_encoder=False
+        random_state=42
     )
 }
 
@@ -337,7 +338,7 @@ model_components = {
     'trained_models': models
 }
 output_name = os.environ.get('MODEL_OUTPUT_NAME', 'final_phishing_model.joblib')
-output_path = f"../models/{output_name}"
+output_path = os.path.join(SCRIPT_DIR, '..', 'models', output_name)
 joblib.dump(model_components, output_path)
 print(f"✓ Model saved as '{output_name}' successfully!")
 print("Training process completed.")

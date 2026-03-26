@@ -3,7 +3,11 @@ console.log(`[CONTENT SCRIPT] Loaded on: ${document.location.href}`);
 let warningOverlayVisible = false;
 
 function showWarningOverlay(details) {
-    if (warningOverlayVisible) return;
+    // Remove any existing overlay so the warning can be re-shown
+    const existing = document.getElementById('security-warning-overlay');
+    if (existing) {
+        existing.remove();
+    }
     warningOverlayVisible = true;
 
     document.body.style.overflow = 'hidden';

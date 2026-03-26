@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from collections import Counter
 import re
+import os
 
 def diagnose_dataset(csv_file):
     """Comprehensive dataset diagnosis to identify labeling issues"""
@@ -137,7 +138,12 @@ def diagnose_dataset(csv_file):
     return df
 
 if __name__ == "__main__":
-    df = diagnose_dataset('phishing_site_urls.csv')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(script_dir, '..', 'data')
+    raw_csv = os.path.join(data_dir, 'phishing_site_urls.csv')
+    cleaned_csv = os.path.join(data_dir, 'phishing_site_urls_cleaned.csv')
+
+    df = diagnose_dataset(raw_csv)
     
     print(f"\n🧹 CLEANING SUGGESTIONS:")
     print("Run this code to create a cleaned dataset:")
@@ -157,4 +163,4 @@ if __name__ == "__main__":
     print(f"Cleaned: {len(cleaned_df)} rows")
     print(f"Removed: {len(df) - len(cleaned_df)} problematic entries")
 
-    cleaned_df.to_csv('../data/phishing_site_urls_cleaned.csv', index=False)
+    cleaned_df.to_csv(cleaned_csv, index=False)

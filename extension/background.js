@@ -65,12 +65,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 const scannedTabs = new Map();
 // Track in-flight scans to avoid duplicate concurrent requests
 const scanningTabs = new Map();
-// Track blocked URLs to prevent re-scanning
+// Track the last known safe page for each tab so the blocked page can send the user back somewhere useful.
+const lastSafeUrlByTab = new Map();
+// Track blocked URLs to prevent re-scanning (capped to avoid unbounded growth)
 const blockedUrls = new Set();
+const MAX_BLOCKED_URLS = 500;
 const BYPASS_MARKER = '#fortnox-allow';
 
 function hasBypassMarker(url) {
     return typeof url === 'string' && url.includes(BYPASS_MARKER);
+}
+
+function buildBlockedPageUrl(targetUrl, returnToUrl) {
+    const params = new URLSearchParams({ target: targetUrl });
+
+    if (returnToUrl) {
+        params.set('returnTo', returnToUrl);
+    }
+
+    return `chrome-extension://${chrome.runtime.id}/blocked.html?${params.toString()}`;
 }
 
 // Auto-scan function
@@ -143,201 +156,18 @@ async function autoScanUrl(tabId, url) {
             console.log(`[AUTO-SCAN] Risk Level: ${data.riskLevel || data.prediction}`);
             console.log(`[AUTO-SCAN] Probabilities: Safe=${((data.probabilities?.[0] || 0) * 100).toFixed(1)}%, Phishing=${((data.probabilities?.[1] || 0) * 100).toFixed(1)}%`);
 
-            // Mark as blocked
+            // Mark as blocked (evict oldest if at capacity)
+            if (blockedUrls.size >= MAX_BLOCKED_URLS) {
+                const oldest = blockedUrls.values().next().value;
+                blockedUrls.delete(oldest);
+            }
             blockedUrls.add(url);
 
-            // Hard block only for high-confidence phishing
-            try {
-                // Generate detailed risk explanation
-                const riskScore = ((data.riskScore || data.probabilities?.[1] || 0) * 100).toFixed(1);
-                const safeProb = ((data.probabilities?.[0] || 0) * 100).toFixed(1);
-                const phishingProb = ((data.probabilities?.[1] || 0) * 100).toFixed(1);
-
-                let riskReasons = [];
-                if (data.riskScore >= 0.7) {
-                    riskReasons.push('Very high phishing probability detected (' + riskScore + '%)');
-                }
-                if (data.message && data.message.includes('phishing')) {
-                    riskReasons.push('Phishing patterns identified in URL structure');
-                }
-                if (url.includes('login') || url.includes('verify') || url.includes('secure')) {
-                    riskReasons.push('Suspicious login/verification page characteristics');
-                }
-                if (url.includes('webflow.io') || url.includes('wixsite.com') || url.includes('000webhost')) {
-                    riskReasons.push('Free hosting domain often used for phishing attacks');
-                }
-                if (url.includes('ledger') && !url.includes('ledger.com')) {
-                    riskReasons.push('Potential brand impersonation (fake Ledger website)');
-                }
-                if (!riskReasons.length) {
-                    riskReasons.push('High risk score from machine learning analysis');
-                    riskReasons.push('URL features match known phishing patterns');
-                }
-
-                const reasonsHtml = riskReasons.map(reason => `<li>${reason}</li>`).join('');
-                const modelAccuracy = data.modelMetrics?.accuracy ? (data.modelMetrics.accuracy * 100).toFixed(1) + '%' : 'High';
-
-                // Create a data URL with the blocked page HTML
-                const blockedPageHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Blocked - Phishing Threat Detected</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #991b1b 0%, #dc2626 100%);
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            text-align: center;
-        }
-        .container {
-            max-width: 700px;
-            padding: 40px;
-        }
-        h1 {
-            font-size: 2.5em;
-            margin-bottom: 20px;
-        }
-        h2 {
-            font-size: 1.5em;
-            margin-top: 30px;
-            margin-bottom: 15px;
-            text-align: left;
-        }
-        p {
-            font-size: 1.1em;
-            line-height: 1.6;
-            margin-bottom: 20px;
-            text-align: left;
-        }
-        .url-display {
-            background: rgba(255,255,255,0.15);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-            word-break: break-all;
-            font-family: monospace;
-            font-size: 0.9em;
-        }
-        .risk-box {
-            background: rgba(255,255,255,0.1);
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-            text-align: left;
-        }
-        .risk-box ul {
-            text-align: left;
-            padding-left: 20px;
-        }
-        .risk-box li {
-            margin: 10px 0;
-            line-height: 1.5;
-        }
-        .stats {
-            display: flex;
-            justify-content: space-around;
-            margin: 20px 0;
-            flex-wrap: wrap;
-        }
-        .stat-item {
-            background: rgba(255,255,255,0.1);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px;
-            min-width: 150px;
-        }
-        .stat-value {
-            font-size: 1.8em;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        .stat-label {
-            font-size: 0.9em;
-            opacity: 0.9;
-        }
-        button {
-            padding: 15px 30px;
-            font-size: 1.1em;
-            font-weight: bold;
-            cursor: pointer;
-            border: 2px solid white;
-            background-color: white;
-            color: #991b1b;
-            border-radius: 5px;
-            margin: 10px;
-        }
-        button:hover {
-            background-color: #f0f0f0;
-            transform: scale(1.05);
-        }
-        .warning-icon {
-            font-size: 4em;
-            margin-bottom: 20px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="warning-icon">🚨</div>
-        <h1>Threat Detected!</h1>
-        <p><strong>This website has been blocked for your protection.</strong></p>
-
-        <div class="url-display">${url}</div>
-
-        <div class="stats">
-            <div class="stat-item">
-                <div class="stat-value">${riskScore}%</div>
-                <div class="stat-label">Risk Score</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value">${phishingProb}%</div>
-                <div class="stat-label">Phishing Probability</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value">${safeProb}%</div>
-                <div class="stat-label">Safe Probability</div>
-            </div>
-        </div>
-
-        <div class="risk-box">
-            <h2>Why was this site blocked?</h2>
-            <p>Our AI-powered phishing detection system analyzed this website and identified the following risk factors:</p>
-            <ul>
-                ${reasonsHtml}
-            </ul>
-            <p style="margin-top: 20px;"><strong>Risk Level:</strong> ${data.riskLevel || 'High Risk'}</p>
-            <p><strong>Model Confidence:</strong> ${modelAccuracy}</p>
-        </div>
-
-        <div style="margin-top: 30px;">
-            <p><strong>It is strongly advised NOT to proceed to this website.</strong></p>
-            <p>This site may attempt to steal your personal information, login credentials, or financial details.</p>
-        </div>
-
-        <div style="margin-top: 30px;">
-            <button onclick="window.history.back()">Go Back to Safety</button>
-            <button onclick="window.location.href='https://www.google.com'">Go to Google</button>
-        </div>
-    </div>
-</body>
-</html>`;
-
-                const blockedPageUrl = `chrome-extension://${chrome.runtime.id}/blocked.html?target=${encodeURIComponent(url)}`;
-
-                // Redirect the tab to the blocked page
-                chrome.tabs.update(tabId, { url: blockedPageUrl }, () => {
-                    console.log(`[AUTO-SCAN] Successfully blocked and redirected tab ${tabId}`);
-                });
-
-            } catch (error) {
+            // Redirect to the blocked page
+            const blockedPageUrl = buildBlockedPageUrl(url, lastSafeUrlByTab.get(tabId));
+            chrome.tabs.update(tabId, { url: blockedPageUrl }).then(() => {
+                console.log(`[AUTO-SCAN] Successfully blocked and redirected tab ${tabId}`);
+            }).catch((error) => {
                 console.error(`[AUTO-SCAN] Error blocking URL: ${error.message}`);
                 // Fallback: try to send warning overlay
                 setTimeout(() => {
@@ -350,7 +180,7 @@ async function autoScanUrl(tabId, url) {
                         }
                     }).catch(e => console.warn(`[AUTO-SCAN] Could not send warning: ${e.message}`));
                 }, 1000);
-            }
+            });
         } else if (shouldWarn) {
             console.log(`[AUTO-SCAN] Warning only (no hard block): ${url}`);
             blockedUrls.delete(url);
@@ -366,6 +196,7 @@ async function autoScanUrl(tabId, url) {
             console.log(`[AUTO-SCAN] âœ… URL is safe: ${url} (Risk: ${data.riskLevel || 'Low'})`);
             // Remove from blocked list if it was previously blocked
             blockedUrls.delete(url);
+            lastSafeUrlByTab.set(tabId, url);
         }
     } catch (error) {
         console.error(`[AUTO-SCAN] âŒ Error scanning ${url}: ${error.message}`);
@@ -400,9 +231,9 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
         // Skip if already blocked
         if (blockedUrls.has(url)) {
             console.log(`[AUTO-SCAN] ðŸš« URL already blocked, preventing navigation: ${url}`);
-            chrome.tabs.update(tabId, { url: 'chrome-extension://' + chrome.runtime.id + '/blocked.html?target=' + encodeURIComponent(url) }).catch(() => {
+            chrome.tabs.update(tabId, { url: buildBlockedPageUrl(url, lastSafeUrlByTab.get(tabId)) }).catch(() => {
                 // If blocked.html doesn't exist, use data URL
-                const blockedMsg = `data:text/html,<html><body style="background:#991b1b;color:white;text-align:center;padding:50px;font-family:Arial"><h1>Blocked</h1><p>This site was previously identified as high risk.</p><button onclick="history.back()" style="padding:10px 20px;font-size:16px">Go Back</button><button onclick="if(confirm('Proceed to blocked site?'))location.href=decodeURIComponent('${encodeURIComponent(url)}')" style="padding:10px 20px;font-size:16px;margin-left:10px">Continue Anyway</button></body></html>`;
+                const blockedMsg = `data:text/html,<html><body style="background:#991b1b;color:white;text-align:center;padding:50px;font-family:Arial"><h1>Blocked</h1><p>This site was previously identified as high risk.</p><button onclick="history.back()" style="padding:10px 20px;font-size:16px">Go Back</button><button onclick="if(confirm('Proceed to blocked site?'))location.href=decodeURIComponent('${encodeURIComponent(url)}')+'%23fortnox-allow'" style="padding:10px 20px;font-size:16px;margin-left:10px">Continue Anyway</button></body></html>`;
                 chrome.tabs.update(tabId, { url: blockedMsg });
             });
             return;
@@ -458,6 +289,7 @@ chrome.tabs.onCreated.addListener((tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
     scannedTabs.delete(tabId);
     scanningTabs.delete(tabId);
+    lastSafeUrlByTab.delete(tabId);
 });
 
 chrome.runtime.onInstalled.addListener(() => {
