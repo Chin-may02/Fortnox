@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
     "name": "FORTNOX",
-    "version": "0.1.0",
-    "description": "A prototype ML-based Chrome extension for web security.",
+    "version": "0.2.0",
+    "description": "ML-based Chrome extension for web security and email phishing detection.",
     "permissions": [
         "activeTab",
         "scripting",
@@ -11,7 +11,11 @@
         "webNavigation"
     ],
     "host_permissions": [
-        "http://127.0.0.1:5000/*"
+        "http://127.0.0.1:5000/*",
+        "*://mail.google.com/*",
+        "*://outlook.live.com/*",
+        "*://outlook.office365.com/*",
+        "*://outlook.office.com/*"
     ],
     "background": {
         "service_worker": "background.js"
@@ -27,6 +31,15 @@
             "css": [
                 "warning_styles.css"
             ]
+        },
+        {
+            "matches": [
+                "*://mail.google.com/*"
+            ],
+            "js": [
+                "gmail_content.js"
+            ],
+            "run_at": "document_idle"
         }
     ],
     "action": {

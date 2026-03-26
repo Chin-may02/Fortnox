@@ -9,6 +9,9 @@ from scipy.sparse import hstack
 from scipy.special import expit
 import os
 
+# Import email feature extraction
+from email_features import extract_email_features, get_email_feature_columns
+
 app = Flask(__name__)
 CORS(app)
 
@@ -259,6 +262,190 @@ def check_url():
         response_payload['modelComparisons'] = model_comparisons
 
     return jsonify(response_payload)
+
+
+@app.route('/check_email', methods=['POST'])
+def check_email():
+    """
+    Endpoint for email phishing classification.
+
+    Expected JSON payload:
+    {
+        "from_email": "sender@example.com",
+        "from_name": "John Doe",
+        "subject": "Email subject",
+        "body_text": "Email body content",
+        "body_html": "<html>...</html>",  // optional
+        "reply_to": "reply@example.com",  // optional
+        "to_email": "recipient@example.com",  // optional
+        "headers": {...},  // optional
+        "attachments": ["file1.pdf", "file2.doc"],  // optional
+        "urls": ["http://example.com"]  // optional, will be extracted if not provided
+    }
+
+    Returns:
+    {
+        "prediction": "safe" | "phishing",
+        "riskScore": 0.0-1.0,
+        "riskLevel": "Low Risk" | "Medium Risk" | "High Risk",
+        "probabilities": [safe_prob, phishing_prob],
+        "emailFeatures": {...},
+        "urlAnalysis": [...],  // Analysis of extracted URLs
+        "message": "...",
+        "modelName": "...",
+        "modelMetrics": {...}
+    }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    # Validate required fields
+    required_fields = ['from_email', 'subject', 'body_text']
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        return jsonify({'error': f'Missing required fields: {", ".join(missing_fields)}'}), 400
+
+    try:
+        # Extract email features
+        email_features = extract_email_features(data)
+        extracted_urls = email_features.pop('extracted_urls', [])
+
+        # Analyze extracted URLs using existing URL classifier
+        url_analysis = []
+        suspicious_url_count = 0
+        max_url_risk = 0.0
+
+        for url in extracted_urls[:10]:  # Limit to first 10 URLs to avoid overload
+            try:
+                _, url_probabilities, _, _, _ = predict_single_url(url, model_components)
+                url_risk = float(url_probabilities[1])
+                max_url_risk = max(max_url_risk, url_risk)
+
+                url_analysis.append({
+                    'url': url,
+                    'risk': url_risk,
+                    'classification': 'phishing' if url_risk >= 0.5 else 'safe'
+                })
+
+                if url_risk >= 0.6:
+                    suspicious_url_count += 1
+            except Exception as e:
+                print(f"Error analyzing URL {url}: {e}")
+
+        # Calculate email risk score based on features and URL analysis
+        # This is a simple heuristic - could be replaced with a trained model
+        risk_score = 0.0
+        risk_factors = []
+
+        # Sender-based risk
+        if email_features.get('sender_is_freemail', 0) == 1:
+            risk_score += 0.1
+        if email_features.get('sender_has_suspicious_tld', 0) == 1:
+            risk_score += 0.15
+            risk_factors.append('Suspicious sender domain')
+        if email_features.get('reply_to_mismatch', 0) == 1:
+            risk_score += 0.2
+            risk_factors.append('Reply-to address mismatch')
+        if email_features.get('from_name_has_brand', 0) == 1:
+            risk_score += 0.15
+            risk_factors.append('Brand impersonation attempt')
+
+        # Subject-based risk
+        urgency_count = email_features.get('subject_urgency_count', 0)
+        if urgency_count > 0:
+            risk_score += min(0.2, urgency_count * 0.1)
+            risk_factors.append(f'Urgency keywords detected ({urgency_count})')
+
+        financial_count = email_features.get('subject_financial_count', 0)
+        if financial_count > 0:
+            risk_score += min(0.15, financial_count * 0.08)
+            risk_factors.append(f'Financial keywords detected ({financial_count})')
+
+        # Body-based risk
+        if email_features.get('body_urgency_count', 0) > 2:
+            risk_score += 0.15
+            risk_factors.append('High urgency in email body')
+
+        if email_features.get('body_caps_ratio', 0) > 0.3:
+            risk_score += 0.1
+            risk_factors.append('Excessive capitalization')
+
+        # URL-based risk
+        if suspicious_url_count > 0:
+            risk_score += min(0.3, suspicious_url_count * 0.15)
+            risk_factors.append(f'Suspicious URLs detected ({suspicious_url_count})')
+
+        # Incorporate max URL risk
+        risk_score = max(risk_score, max_url_risk * 0.7)
+
+        # Attachment risk
+        if email_features.get('has_suspicious_attachment', 0) == 1:
+            risk_score += 0.25
+            risk_factors.append('Suspicious attachment detected')
+
+        # HTML form risk (phishing pages)
+        if email_features.get('html_has_form', 0) == 1 and email_features.get('html_has_input', 0) == 1:
+            risk_score += 0.2
+            risk_factors.append('Email contains login form')
+
+        # Authentication failure
+        if email_features.get('has_auth_failure', 0) == 1:
+            risk_score += 0.15
+            risk_factors.append('Email authentication failed')
+
+        # Normalize risk score to 0-1 range
+        risk_score = min(1.0, risk_score)
+
+        # Determine risk level and prediction
+        if risk_score >= 0.7:
+            risk_level = "High Risk"
+            prediction = "phishing"
+            message = "This email shows multiple signs of a phishing attempt."
+        elif risk_score >= 0.4:
+            risk_level = "Medium Risk"
+            prediction = "suspicious"
+            message = "This email contains some suspicious elements. Exercise caution."
+        else:
+            risk_level = "Low Risk"
+            prediction = "safe"
+            message = "This email appears to be safe."
+
+        # Convert phishing probability for consistency with URL classifier
+        phishing_prob = risk_score
+        safe_prob = 1.0 - risk_score
+
+        # Build response
+        response_payload = {
+            'prediction': prediction,
+            'message': message,
+            'probabilities': [float(safe_prob), float(phishing_prob)],
+            'riskLevel': risk_level,
+            'riskScore': float(risk_score),
+            'riskFactors': risk_factors,
+            'emailFeatures': email_features,
+            'urlAnalysis': url_analysis,
+            'suspiciousUrlCount': suspicious_url_count,
+            'totalUrls': len(extracted_urls)
+        }
+
+        # Include model info for consistency
+        if model_components is not None:
+            active_model_name = model_components.get('model_name', 'Email Heuristic Classifier')
+            response_payload['modelName'] = active_model_name
+
+            # For email, we're using heuristics, so provide appropriate metrics
+            response_payload['modelMetrics'] = {
+                'type': 'rule-based',
+                'features_analyzed': len(email_features),
+                'urls_analyzed': len(url_analysis)
+            }
+
+        return jsonify(response_payload)
+
+    except Exception as e:
+        return jsonify({'error': f'Error processing email: {str(e)}'}), 500
+
 
 if __name__ == '__main__':
     if model_components is None:
