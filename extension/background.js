@@ -103,6 +103,19 @@ const blockedUrls = new Set();
 const MAX_BLOCKED_URLS = 500;
 const BYPASS_MARKER = '#fortnox-allow';
 
+function isEmailAppUrl(url) {
+    if (typeof url !== 'string') {
+        return false;
+    }
+
+    try {
+        const parsed = new URL(url);
+        return parsed.hostname === 'mail.google.com';
+    } catch (error) {
+        return false;
+    }
+}
+
 function hasBypassMarker(url) {
     return typeof url === 'string' && url.includes(BYPASS_MARKER);
 }
@@ -122,6 +135,12 @@ async function autoScanUrl(tabId, url) {
     // Skip non-http/https URLs (chrome://, about:, etc.)
     if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
         console.log(`[AUTO-SCAN] Skipping non-HTTP URL: ${url}`);
+        return;
+    }
+
+    // Gmail pages should use the email classifier instead of the generic URL workflow.
+    if (isEmailAppUrl(url)) {
+        console.log(`[AUTO-SCAN] Skipping email app URL classification for: ${url}`);
         return;
     }
 
@@ -252,6 +271,10 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
         const url = details.url;
         const tabId = details.tabId;
 
+        if (isEmailAppUrl(url)) {
+            return;
+        }
+
         // Explicit user bypass for this navigation
         if (hasBypassMarker(url)) {
             console.log(`[AUTO-SCAN] One-time bypass allowed for: ${url}`);
@@ -288,6 +311,9 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     // Only scan when page is fully loaded and has a valid URL
     if (changeInfo.status === 'complete' && tab.url && tab.url.startsWith('http')) {
+        if (isEmailAppUrl(tab.url)) {
+            return;
+        }
         if (hasBypassMarker(tab.url)) {
             return;
         }
@@ -303,12 +329,15 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 // Also listen for new tabs being created
 chrome.tabs.onCreated.addListener((tab) => {
     if (tab.url && tab.url.startsWith('http')) {
+        if (isEmailAppUrl(tab.url)) {
+            return;
+        }
         console.log(`[AUTO-SCAN] New tab created: ${tab.url}`);
         // Wait for tab to load, then scan
         chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo, updatedTab) {
             if (tabId === tab.id && changeInfo.status === 'complete' && updatedTab.url) {
                 chrome.tabs.onUpdated.removeListener(listener);
-                if (!hasBypassMarker(updatedTab.url)) {
+                if (!hasBypassMarker(updatedTab.url) && !isEmailAppUrl(updatedTab.url)) {
                     autoScanUrl(tabId, updatedTab.url);
                 }
             }
