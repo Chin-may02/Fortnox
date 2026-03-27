@@ -56,37 +56,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return;
         }
 
-        // New handler for email checking
-        if (request.action === "checkEmailWithBackend") {
-            const emailData = request.emailData;
-            if (!emailData || !emailData.from_email) {
-                sendResponse({ error: "No email data provided for backend check." });
-                return;
-            }
-            try {
-                console.log('[FORTNOX Background] Checking email:', emailData.from_email);
-                const response = await fetch('http://127.0.0.1:5000/check_email', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(emailData),
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Server responded with status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                console.log('[FORTNOX Background] Email analysis result:', data);
-
-                sendResponse({ type: 'emailResult', data: data });
-
-            } catch (error) {
-                console.error('[FORTNOX Background] Email check error:', error);
-                sendResponse({ error: `Backend fetch error: ${error.message}. Is the Python server running?` });
-            }
-            return;
-        }
-
     })();
 
     return true;
