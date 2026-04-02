@@ -398,7 +398,7 @@ def check_email():
         risk_score = min(1.0, risk_score)
 
         # Determine risk level and prediction
-        if risk_score >= 0.7:
+        if risk_score >= 0.65:
             risk_level = "High Risk"
             prediction = "phishing"
             message = "This email shows multiple signs of a phishing attempt."

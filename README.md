@@ -1,96 +1,141 @@
 # FORTNOX
 
-FORTNOX is a comprehensive security project combining phishing URL detection and email phishing classification:
-- A Flask backend API for model inference (URLs and emails)
-- A Chrome extension with Gmail integration
-- A machine learning training and evaluation pipeline
+FORTNOX is a local phishing detection project built around two connected parts:
+- A Flask backend API for phishing analysis
+- A Chrome extension for real-time browser and Gmail detection
 
-The system classifies URLs as `safe` or `phishing`, analyzes emails for phishing indicators, returns risk/confidence values, and exposes model metrics for reporting.
+The project focuses on two use cases:
+- Detecting risky or phishing URLs while browsing
+- Analyzing Gmail messages for phishing signals such as sender issues, suspicious wording, risky links, and dangerous attachments
 
-## Key Features
+## What The Project Includes
 
-### 🌐 URL Phishing Detection
-- Real-time URL scanning as you browse
-- 4 trained ML models (Linear SVM, Logistic Regression, Random Forest, XGBoost)
-- 24+ URL features + TF-IDF text analysis
-- Graduated risk response (block/warn/allow)
-- Model switching and comparison
+FORTNOX combines model-based URL detection with rule-based email risk analysis. The browser extension handles collection and display, while the Flask backend performs the actual analysis and returns a structured risk result.
 
-### 📧 Email Phishing Detection (NEW!)
-- **Seamless Gmail integration** - no copy-paste needed
-- **Real-time email analysis** as you read
-- **30+ email features** analyzed (sender, subject, body, URLs, attachments)
-- **Inline risk indicators** with detailed risk factors
-- **URL extraction and analysis** using ML models
-- **Visual warnings** for high-risk emails
+At a high level:
+- The extension sends URLs to the backend for phishing checks
+- The Gmail content script extracts visible email data and sends it to the backend
+- The backend returns a prediction, risk score, and supporting details
+- The extension then warns, blocks, or highlights the result in the browser UI
 
-**See [EMAIL_CLASSIFIER_GUIDE.md](EMAIL_CLASSIFIER_GUIDE.md) for detailed email classifier documentation.**
+## Main Features
 
-## Project Structure
+### URL Phishing Detection
+
+- Real-time URL scanning through the Chrome extension
+- Backend URL classification through `POST /check_url`
+- Feature-based URL analysis combined with text vectorization
+- Risk-driven behavior in the extension such as allow, warning, or block flow
+- Reuse of a saved trained model from `models/final_phishing_model.joblib`
+
+### Gmail Email Detection
+
+- Automatic email monitoring inside Gmail
+- Email extraction directly from the Gmail interface
+- Risk scoring based on sender, subject, body, links, HTML structure, and attachments
+- Per-email risk badge shown in the Gmail UI
+- High-risk warning overlay for suspicious emails
+- URL extraction from email content with follow-up URL analysis on detected links
+
+## Project Components
 
 - `app/`
-  Flask API (`app.py`), email feature extraction (`email_features.py`), and API tests.
-- `training/`
-  Model training script (`train_model.py`) and model selection logic.
-- `evaluation/`
-  Scripts to generate report tables and graphs from saved model metrics.
+  Contains the Flask backend. This includes the main API in `app.py` and the email feature extraction logic in `email_features.py`.
+
 - `extension/`
-  Chrome extension files (popup, background, content scripts, Gmail integration, manifest).
-- `data/`
-  Dataset files (`phishing_site_urls.csv`, `phishing_site_urls_cleaned.csv`).
+  Contains the Chrome extension. This includes the background service worker, popup, content scripts, Gmail content script, blocked page, styles, and manifest.
+
+- `training/`
+  Contains the scripts used to train the URL phishing model and produce the saved model artifact used at inference time.
+
+- `evaluation/`
+  Contains scripts used to generate model summaries and comparison outputs from trained model results.
+
 - `models/`
-  Active model artifact and backups.
+  Stores trained model artifacts. The backend depends on the active saved model file in this folder.
+
+- `data/`
+  Stores the project datasets used for phishing URL training and related data processing.
+
 - `reports/`
-  Generated report outputs (`performance_summary.*`, graph image).
+  Stores generated model comparison outputs and summary files.
+
 - `tests/`
-  Validation, stress test, and email classifier test scripts.
+  Contains validation and stress tests for the backend and project behavior.
 
-## How It Works
+## How The System Works
 
-### URL Classification
-1. A URL is sent to `POST /check_url`.
-2. API loads `models/final_phishing_model.joblib`.
-3. URL is preprocessed:
-   - normalized text
-   - engineered numerical URL features
-   - character-level TF-IDF features
-4. Features are combined and passed to selected model.
-5. API returns:
-   - prediction (`safe` or `phishing`)
-   - probability/risk score
-   - model name and model metrics
+### URL Detection Flow
 
-### Email Classification (NEW!)
-1. Gmail content script extracts email data (sender, subject, body, attachments).
-2. Email sent to `POST /check_email`.
-3. API extracts 32 email-specific features:
-   - Sender validation (domain, authentication, brand impersonation)
-   - Subject analysis (urgency, financial keywords, caps ratio)
-   - Body analysis (entropy, keywords, structure)
-   - URL extraction and individual analysis with ML models
-   - Attachment analysis (suspicious file types)
-4. Risk score calculated using weighted heuristics + URL risk.
-5. API returns:
-   - prediction (`safe`, `suspicious`, or `phishing`)
-   - risk score and level
-   - list of detected risk factors
-   - URL analysis results
+1. The extension detects a page navigation or page update.
+2. The URL is sent to the Flask backend through `POST /check_url`.
+3. The backend extracts numerical URL features and text-based URL features.
+4. The trained model predicts whether the URL is safe or phishing.
+5. The backend returns a risk score, prediction, and model metadata.
+6. The extension decides whether to allow the page, show a warning, or redirect to the blocked page.
 
-## Model Artifact (`.joblib`) Contents
+### Gmail Email Detection Flow
 
-The saved model bundle includes:
-- `classifier`
-- `numerical_scaler`
-- `text_vectorizer`
-- `feature_columns`
-- `model_name`
-- `best_model_metrics`
-- `all_model_metrics`
-- `trained_models`
+1. `gmail_content.js` watches Gmail for opened email content.
+2. When an email is opened, it extracts fields such as:
+   - sender email
+   - sender name
+   - recipient
+   - subject
+   - plain text body
+   - HTML body
+   - reply-to
+   - attachment names
+3. The content script sends this payload to the background script.
+4. The background script forwards it to `POST /check_email`.
+5. The backend extracts email-specific features and scans URLs found in the message.
+6. The backend returns a risk result with:
+   - prediction
+   - risk score
+   - risk level
+   - risk factors
+   - URL analysis summary
+7. The Gmail content script displays a badge, and for high-risk messages, an overlay warning.
+
+## Detection Logic
+
+### URL Analysis
+
+The URL backend uses a trained model with engineered URL features and vectorized text features. This is the model-driven part of the project and is the main source of URL phishing classification.
+
+Examples of URL-oriented signals include:
+- protocol usage
+- domain structure
+- suspicious TLDs
+- presence of numbers or IP addresses
+- suspicious keywords
+- shortener patterns
+- text vectorization of the normalized URL
+
+### Email Analysis
+
+The email flow currently uses heuristic scoring rather than a separate trained email model. It evaluates a message using extracted features such as:
+- sender domain traits
+- freemail usage
+- suspicious TLDs
+- reply-to mismatch
+- brand impersonation in display names
+- urgency and financial keywords in subject and body
+- excessive capitalization
+- number and quality of embedded URLs
+- suspicious attachments
+- HTML forms or input fields in the email body
+
+The backend also analyzes up to 10 extracted URLs from an email using the URL classifier and folds that into the email risk score.
+
+Email results are returned as:
+- `Low Risk`
+- `Medium Risk`
+- `High Risk`
 
 ## Setup
 
-Create and activate your virtual environment, then install dependencies:
+Create and activate a virtual environment, then install the Python dependencies:
 
 ```powershell
 python -m venv venv
@@ -98,51 +143,70 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-## Run the API
+The main dependencies include Flask, pandas, numpy, scikit-learn, joblib, xgboost, and requests.
 
-From project root:
+## Running The Backend
+
+From the project root:
 
 ```powershell
 .\venv\Scripts\python app\app.py
 ```
 
-API runs on `http://127.0.0.1:5000`.
+The backend runs locally at:
 
-## Train the Model
+```text
+http://127.0.0.1:5000
+```
 
-From `training/`:
+This API must be running for the extension to perform URL or Gmail analysis.
+
+## Loading The Chrome Extension
+
+1. Open `chrome://extensions/`
+2. Turn on Developer mode
+3. Click Load unpacked
+4. Select the `extension/` folder from this project
+
+The extension uses permissions for browser tabs, storage, navigation events, and host access to Gmail and the local backend.
+
+## Main API Endpoints
+
+- `POST /check_url`
+  Accepts a URL and returns a phishing prediction, risk score, probabilities, and model details.
+
+- `POST /check_email`
+  Accepts extracted email content and returns an email risk result, supporting features, and URL analysis data for links found in the message.
+
+## Training
+
+To retrain the URL model:
 
 ```powershell
-$env:PYTHONIOENCODING='utf-8'
+cd training
 ..\venv\Scripts\python train_model.py
 ```
 
-This updates:
-- `models/final_phishing_model.joblib`
+This updates the saved model artifact used by the backend:
 
-## Generate Reports
+```text
+models/final_phishing_model.joblib
+```
 
-From `reports/`:
+## Reports
+
+To generate report outputs:
 
 ```powershell
 ..\venv\Scripts\python ..\evaluation\generate_performance_table.py
 ..\venv\Scripts\python ..\evaluation\make_graph.py
 ```
 
-This updates:
-- `reports/performance_summary.txt`
-- `reports/performance_summary.csv`
-- `reports/model_comparison_graph.png`
+These scripts generate summary outputs in the `reports/` folder.
 
-## Useful Tests
+## Notes
 
-- API payload/metric check: `app/test_metrics_api.py`
-- Input validation test: `tests/validation_test.py`
-- Stress test: `tests/stress_test.py`
-
-## Current Important Notes
-
-- Keep training and inference feature logic aligned (`training/train_model.py` and `app/app.py`).
-- Back up model artifacts before retraining to avoid accidental overwrite.
-- Reporting scripts read metrics from the current saved model, so stale model files produce stale reports.
-
+- The project is intended to run locally during development and testing
+- The backend depends on the saved model file inside `models/`
+- Gmail analysis depends on both the extension and the running Flask backend
+- URL detection and Gmail detection share the same backend, but they use different analysis paths
