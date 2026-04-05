@@ -76,6 +76,14 @@ function hasBypassMarker(url) {
     return typeof url === 'string' && url.includes(BYPASS_MARKER);
 }
 
+function isGmailUrl(url) {
+    try {
+        return new URL(url).hostname === 'mail.google.com';
+    } catch {
+        return false;
+    }
+}
+
 function buildBlockedPageUrl(targetUrl, returnToUrl) {
     const params = new URLSearchParams({ target: targetUrl });
 
@@ -91,6 +99,11 @@ async function autoScanUrl(tabId, url) {
     // Skip non-http/https URLs (chrome://, about:, etc.)
     if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
         console.log(`[AUTO-SCAN] Skipping non-HTTP URL: ${url}`);
+        return;
+    }
+
+    if (isGmailUrl(url)) {
+        console.log(`[AUTO-SCAN] Skipping Gmail URL scan: ${url}`);
         return;
     }
 
@@ -150,8 +163,9 @@ async function autoScanUrl(tabId, url) {
         const warningThreshold = 0.60;
         const shouldHardBlock = phishingProbModel >= hardBlockThreshold;
         const shouldWarn = phishingProbModel >= warningThreshold || data.prediction === "phishing";
+        const shouldShowBlockedPage = shouldHardBlock && !isGmailUrl(url);
 
-        if (shouldHardBlock) {
+        if (shouldShowBlockedPage) {
             console.log(`[AUTO-SCAN] THREAT DETECTED - BLOCKING: ${url}`);
             console.log(`[AUTO-SCAN] Risk Level: ${data.riskLevel || data.prediction}`);
             console.log(`[AUTO-SCAN] Probabilities: Safe=${((data.probabilities?.[0] || 0) * 100).toFixed(1)}%, Phishing=${((data.probabilities?.[1] || 0) * 100).toFixed(1)}%`);
@@ -181,7 +195,7 @@ async function autoScanUrl(tabId, url) {
                     }).catch(e => console.warn(`[AUTO-SCAN] Could not send warning: ${e.message}`));
                 }, 1000);
             });
-        } else if (shouldWarn) {
+        } else if (shouldWarn || shouldHardBlock) {
             console.log(`[AUTO-SCAN] Warning only (no hard block): ${url}`);
             blockedUrls.delete(url);
             chrome.tabs.sendMessage(tabId, {
@@ -220,6 +234,10 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     if (details.frameId === 0 && details.url && details.url.startsWith('http')) {
         const url = details.url;
         const tabId = details.tabId;
+
+        if (isGmailUrl(url)) {
+            return;
+        }
 
         // Explicit user bypass for this navigation
         if (hasBypassMarker(url)) {
