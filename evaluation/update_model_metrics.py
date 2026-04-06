@@ -84,4 +84,3 @@ def update_model_metrics():
 
 if __name__ == '__main__':
     update_model_metrics()
-

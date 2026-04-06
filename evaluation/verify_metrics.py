@@ -33,4 +33,3 @@ if len(values_list) > 1:
         print('   This might cause them to display the same in the UI.')
     else:
         print('SUCCESS: All models have DIFFERENT metrics - should display correctly!')
-

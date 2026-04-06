@@ -16,40 +16,79 @@ const analyzedEmails = new Set();
 // Debounce timer for email changes
 let emailCheckTimeout = null;
 
+function getVisibleElements(selector, root = document) {
+    return Array.from(root.querySelectorAll(selector)).filter((element) => {
+        const style = window.getComputedStyle(element);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+    });
+}
+
+function getActiveEmailBodyElement() {
+    const visibleBodies = getVisibleElements('.a3s.aiL');
+    return visibleBodies.length ? visibleBodies[visibleBodies.length - 1] : document.querySelector('.a3s.aiL');
+}
+
+function getEmailScope(bodyElement) {
+    return bodyElement?.closest('.adn.ads') || document;
+}
+
+function getFieldText(scope, selector, fallbackScope = document) {
+    const scopedElement = scope.querySelector(selector);
+    if (scopedElement?.textContent?.trim()) {
+        return scopedElement.textContent.trim();
+    }
+
+    const fallbackElement = fallbackScope.querySelector(selector);
+    return fallbackElement?.textContent?.trim() || '';
+}
+
+function getEmailAttribute(scope, selector, attribute, fallbackScope = document) {
+    const scopedElement = scope.querySelector(selector);
+    const scopedValue = scopedElement?.getAttribute(attribute)?.trim();
+    if (scopedValue) {
+        return scopedValue;
+    }
+
+    const fallbackElement = fallbackScope.querySelector(selector);
+    return fallbackElement?.getAttribute(attribute)?.trim() || '';
+}
+
 /**
  * Extract email data from Gmail UI
  */
 function extractEmailData() {
     try {
-        // Get sender email from Gmail UI
-        const senderElement = document.querySelector('[email]');
-        const fromEmail = senderElement ? senderElement.getAttribute('email') : '';
+        const bodyElement = getActiveEmailBodyElement();
+        const scope = getEmailScope(bodyElement);
 
-        // Get sender name
-        const senderNameElement = document.querySelector('.gD');
-        const fromName = senderNameElement ? senderNameElement.getAttribute('name') || senderNameElement.textContent : '';
+        // Prefer the currently visible message, but keep document-level fallbacks.
+        const fromEmail = getEmailAttribute(scope, '.gD[email], [email]', 'email');
+        const senderNameElement = scope.querySelector('.gD') || document.querySelector('.gD');
+        const fromName = senderNameElement
+            ? senderNameElement.getAttribute('name') || senderNameElement.textContent.trim()
+            : '';
 
         // Get subject
         const subjectElement = document.querySelector('.hP');
-        const subject = subjectElement ? subjectElement.textContent : '';
+        const subject = subjectElement ? subjectElement.textContent.trim() : '';
 
         // Get email body text
-        const bodyElement = document.querySelector('.a3s.aiL');
         const bodyText = bodyElement ? bodyElement.innerText : '';
 
         // Get HTML body for additional analysis
         const bodyHtml = bodyElement ? bodyElement.innerHTML : '';
 
         // Extract recipient (current user's email)
-        const toEmail = document.querySelector('.go')?.textContent || '';
+        const toEmail = getFieldText(scope, '.go');
 
         // Extract reply-to if different (check for "via" in Gmail)
-        const viaElement = document.querySelector('.gD[aria-label*="via"]');
-        const replyTo = viaElement ? viaElement.getAttribute('email') : '';
+        const replyTo = getEmailAttribute(scope, '.gD[aria-label*="via"]', 'email');
 
         // Get attachment info
-        const attachmentElements = document.querySelectorAll('.aZo span[download]');
-        const attachments = Array.from(attachmentElements).map(el => el.textContent);
+        const attachmentElements = scope.querySelectorAll('.aZo span[download], .aQH span[download]');
+        const attachments = Array.from(attachmentElements)
+            .map((element) => element.textContent.trim())
+            .filter(Boolean);
 
         // Create unique email ID based on sender + subject + partial body
         const emailId = `${fromEmail}_${subject}_${bodyText.substring(0, 50)}`;
@@ -377,7 +416,7 @@ async function analyzeCurrentEmail() {
  */
 function monitorEmailChanges() {
     // Check if we're viewing an email (presence of email body)
-    const emailBody = document.querySelector('.a3s.aiL');
+    const emailBody = getActiveEmailBodyElement();
 
     if (emailBody) {
         // Debounce to avoid multiple triggers

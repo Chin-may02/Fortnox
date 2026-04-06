@@ -27,6 +27,14 @@ def calculate_entropy(text: str) -> float:
     return entropy
 
 
+def strip_html_tags(html: str) -> str:
+    """Convert HTML content into a plain-text fallback."""
+    if not html:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", html)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def extract_urls_from_text(text: str) -> List[str]:
     """Extract all URLs from email body text."""
     if not text:
@@ -96,6 +104,8 @@ def extract_email_features(email_data: Dict[str, Any]) -> Dict[str, Any]:
     subject = email_data.get('subject', '').strip()
     body_text = email_data.get('body_text', '').strip()
     body_html = email_data.get('body_html', '')
+    if not body_text and body_html:
+        body_text = strip_html_tags(body_html)
     reply_to = email_data.get('reply_to', '').strip()
     headers = email_data.get('headers', {})
     attachments = email_data.get('attachments', [])

@@ -7,3 +7,6 @@ scipy
 joblib
 xgboost
 requests
+torch
+transformers
+safetensors

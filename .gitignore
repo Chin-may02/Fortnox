@@ -1,5 +1,3 @@
 models/final_phishing_model.joblib.backup
 models/final_phishing_model.joblib
-models/feature_extractor.pkl
-models/Phishing_final.joblib
-models/Phishing_RF.joblibapp/__pycache__/
+models/results/

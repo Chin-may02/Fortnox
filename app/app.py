@@ -9,20 +9,73 @@ from scipy.sparse import hstack
 from scipy.special import expit
 import os
 
-# Import email feature extraction
-from email_features import extract_email_features, get_email_feature_columns
+try:
+    from .email_features import extract_email_features
+    from .email_model import predict_email_with_model
+except ImportError:
+    from email_features import extract_email_features
+    from email_model import predict_email_with_model
 
 app = Flask(__name__)
 CORS(app)
 
+DEFAULT_DECISION_THRESHOLD = 0.5
+URL_PHISHING_THRESHOLD = 0.5
+SUSPICIOUS_EMAIL_URL_THRESHOLD = 0.6
+EMAIL_MEDIUM_RISK_THRESHOLD = 0.45
+EMAIL_HIGH_RISK_THRESHOLD = 0.75
+
+
+def clamp(value, minimum=0.0, maximum=1.0):
+    return max(minimum, min(maximum, value))
+
+
+def normalize_model_metrics(metrics):
+    metrics = metrics or {}
+    return {
+        'accuracy': float(metrics.get('accuracy', 0)),
+        'recall_phishing': float(metrics.get('recall_phishing', 0)),
+        'f1_phishing': float(metrics.get('f1_phishing', 0)),
+        'precision_phishing': float(metrics.get('precision_phishing', 0)),
+        'auc': float(metrics.get('auc_score', 0))
+    }
+
+
+def get_url_risk_response(prediction_label, risk_score):
+    if prediction_label == "safe":
+        return "Low Risk", "This URL appears to be safe."
+    if risk_score >= URL_PHISHING_THRESHOLD:
+        return "High Risk", "High risk detected - site likely phishing or vulnerable."
+    return "Low Risk", "Low risk detected - site appears safer."
+
+
+def get_email_risk_response(risk_score):
+    if risk_score >= EMAIL_HIGH_RISK_THRESHOLD:
+        return "phishing", "High Risk", "This email shows multiple signs of a phishing attempt."
+    if risk_score >= EMAIL_MEDIUM_RISK_THRESHOLD:
+        return "suspicious", "Medium Risk", "This email contains some suspicious elements. Exercise caution."
+    return "safe", "Low Risk", "This email appears to be safe."
+
+
+def get_email_model_metadata(email_model_result):
+    return {
+        'available': bool(email_model_result.get('available')),
+        'name': email_model_result.get('model_name', 'BERT Email Classifier'),
+        'riskScore': float(email_model_result.get('risk_score', 0.0)),
+        'probabilities': email_model_result.get('probabilities', [1.0, 0.0]),
+        'decisionThreshold': float(email_model_result.get('decision_threshold', DEFAULT_DECISION_THRESHOLD)),
+        'tokenCount': int(email_model_result.get('token_count', 0)),
+        'error': email_model_result.get('error')
+    }
+
+
 def normalize_url(url):
     if pd.isna(url):
         return ""
-    url = str(url).lower().strip()
-    url = re.sub(r'^https?://', '', url)
-    url = re.sub(r'^www\.', '', url)
-    url = url.rstrip('/')
-    return url
+    cleaned_url = str(url).lower().strip()
+    cleaned_url = re.sub(r'^https?://', '', cleaned_url)
+    cleaned_url = re.sub(r'^www\.', '', cleaned_url)
+    return cleaned_url.rstrip('/')
 
 def calculate_entropy(text):
     if not text:
@@ -43,12 +96,11 @@ def extract_url_features(url):
     original_url = str(url).lower()
     features = {}
     try:
-        parse_url = 'http://' + normalized_url
-        parsed = urlparse(parse_url)
+        parsed = urlparse('http://' + normalized_url)
         domain = parsed.netloc or normalized_url.split('/')[0]
         path = parsed.path
         query = parsed.query
-    except:
+    except Exception:
         domain = normalized_url.split('/')[0] if '/' in normalized_url else normalized_url
         path, query = '', ''
     
@@ -81,7 +133,7 @@ def extract_url_features(url):
     shortener_domains = ['bit.ly', 'tinyurl', 'ow.ly', 't.co', 'goo.gl', 'short']
     features['is_url_shortener'] = int(any(short in domain for short in shortener_domains))
     
-    if len(normalized_url) > 0:
+    if normalized_url:
         features['char_diversity'] = len(set(normalized_url)) / len(normalized_url)
         features['vowel_ratio'] = sum(1 for c in normalized_url if c in 'aeiou') / len(normalized_url)
     else:
@@ -112,10 +164,26 @@ except FileNotFoundError:
 except Exception as e:
     print(f"FATAL ERROR: Could not load model. {e}")
 
+
+def get_url_probabilities(classifier, combined_features):
+    try:
+        return classifier.predict_proba(combined_features)[0]
+    except AttributeError:
+        decision = np.asarray(classifier.decision_function(combined_features)).reshape(-1)
+        if decision.size:
+            phishing_prob = expit(float(decision[0]))
+            safe_prob = 1.0 - phishing_prob
+            probabilities = np.array([safe_prob, phishing_prob], dtype=float)
+            probabilities = np.clip(probabilities, 0.0, 1.0)
+            return probabilities / probabilities.sum()
+
+        raw_prediction = classifier.predict(combined_features)[0]
+        return np.array([0.1, 0.9], dtype=float) if raw_prediction == 1 else np.array([0.9, 0.1], dtype=float)
+
 def predict_single_url(url, components, requested_model_name=None):
     """Prepares features and predicts a single URL using the selected model."""
     if components is None:
-        return 1, [0.0, 1.0], ["model", "not", "loaded"], None, 0.5
+        return 1, [0.0, 1.0], ["model", "not", "loaded"], None, DEFAULT_DECISION_THRESHOLD
 
     # Default to the primary classifier
     classifier = components.get('classifier')
@@ -133,16 +201,10 @@ def predict_single_url(url, components, requested_model_name=None):
     feature_columns = components.get('feature_columns')
 
     if classifier is None or numerical_scaler is None or text_vectorizer is None or feature_columns is None:
-        return 1, [0.0, 1.0], ["model", "not", "available"], active_model_name, 0.5
+        return 1, [0.0, 1.0], ["model", "not", "available"], active_model_name, DEFAULT_DECISION_THRESHOLD
 
     features_dict = extract_url_features(url)
-    feature_df = pd.DataFrame([features_dict])
-    
-    for col in feature_columns:
-        if col not in feature_df.columns:
-            feature_df[col] = 0
-    feature_df = feature_df[feature_columns]
-    
+    feature_df = pd.DataFrame([features_dict]).reindex(columns=feature_columns, fill_value=0)
     numerical_features = numerical_scaler.transform(feature_df)
     
     normalized_url = normalize_url(url)
@@ -151,43 +213,131 @@ def predict_single_url(url, components, requested_model_name=None):
     combined_features = hstack([numerical_features, text_features])
     
     model_thresholds = components.get('model_thresholds') or {}
-    decision_threshold = float(model_thresholds.get(active_model_name, components.get('decision_threshold', 0.5)))
-    decision_threshold = max(0.05, min(0.99, decision_threshold))
+    decision_threshold = float(model_thresholds.get(active_model_name, components.get('decision_threshold', DEFAULT_DECISION_THRESHOLD)))
+    decision_threshold = clamp(decision_threshold, 0.05, 0.99)
 
-    # Get probabilities - always use actual model probabilities for live display
-    try:
-        probabilities = classifier.predict_proba(combined_features)[0]
-    except AttributeError:
-        # For LinearSVC, use decision_function and convert to probabilities
-        decision = classifier.decision_function(combined_features)
-        if isinstance(decision, np.ndarray):
-            # Flatten if needed
-            if decision.ndim > 1:
-                decision = decision.flatten()
-            
-            # Convert decision scores to probabilities using sigmoid (expit)
-            # This gives realistic probability distributions instead of binary [0,1]
-            decision_score = float(decision[0] if len(decision) == 1 else decision[0])
-            # Use sigmoid to convert to probability - this gives smooth probabilities
-            phishing_prob = expit(decision_score)
-            safe_prob = 1.0 - phishing_prob
-            # Ensure probabilities are valid and sum to 1
-            probabilities = np.array([safe_prob, phishing_prob], dtype=float)
-            probabilities = np.clip(probabilities, 0.0, 1.0)  # Ensure in valid range
-            probabilities = probabilities / probabilities.sum()  # Normalize to sum to 1
-        else:
-            # Fallback: use prediction directly but still show some probability
-            raw_prediction = classifier.predict(combined_features)[0]
-            if raw_prediction == 1:
-                probabilities = np.array([0.1, 0.9], dtype=float)  # Phishing with some uncertainty
-            else:
-                probabilities = np.array([0.9, 0.1], dtype=float)  # Safe with some uncertainty
+    probabilities = get_url_probabilities(classifier, combined_features)
 
     phishing_prob = float(probabilities[1]) if len(probabilities) > 1 else 1.0
     prediction = 1 if phishing_prob >= decision_threshold else 0
     tokens = text_vectorizer.build_analyzer()(normalized_url)
 
     return int(prediction), probabilities.tolist(), tokens, active_model_name, decision_threshold
+
+
+def analyze_email_urls(extracted_urls):
+    """Analyze URLs embedded in an email using the existing URL classifier."""
+    if model_components is None:
+        return [], 0, 0.0
+
+    url_analysis = []
+    suspicious_url_count = 0
+    max_url_risk = 0.0
+
+    for url in extracted_urls[:10]:
+        try:
+            _, url_probabilities, _, _, _ = predict_single_url(url, model_components)
+            url_risk = float(url_probabilities[1])
+            max_url_risk = max(max_url_risk, url_risk)
+
+            url_analysis.append({
+                'url': url,
+                'risk': url_risk,
+                'classification': 'phishing' if url_risk >= URL_PHISHING_THRESHOLD else 'safe'
+            })
+
+            if url_risk >= SUSPICIOUS_EMAIL_URL_THRESHOLD:
+                suspicious_url_count += 1
+        except Exception as e:
+            print(f"Error analyzing URL {url}: {e}")
+
+    return url_analysis, suspicious_url_count, max_url_risk
+
+
+def calculate_email_heuristic_risk(email_features, suspicious_url_count, max_url_risk):
+    """
+    Preserve the existing feature-based email signals so BERT can be combined
+    with explainable metadata and URL evidence.
+    """
+    heuristic_score = 0.0
+    risk_factors = []
+
+    if email_features.get('sender_is_freemail', 0) == 1:
+        heuristic_score += 0.1
+    if email_features.get('sender_has_suspicious_tld', 0) == 1:
+        heuristic_score += 0.15
+        risk_factors.append('Suspicious sender domain')
+    if email_features.get('reply_to_mismatch', 0) == 1:
+        heuristic_score += 0.2
+        risk_factors.append('Reply-to address mismatch')
+    if email_features.get('from_name_has_brand', 0) == 1:
+        heuristic_score += 0.15
+        risk_factors.append('Brand impersonation attempt')
+
+    urgency_count = email_features.get('subject_urgency_count', 0)
+    if urgency_count > 0:
+        heuristic_score += min(0.2, urgency_count * 0.1)
+        risk_factors.append(f'Urgency keywords detected ({urgency_count})')
+
+    financial_count = email_features.get('subject_financial_count', 0)
+    if financial_count > 0:
+        heuristic_score += min(0.15, financial_count * 0.08)
+        risk_factors.append(f'Financial keywords detected ({financial_count})')
+
+    if email_features.get('body_urgency_count', 0) > 2:
+        heuristic_score += 0.15
+        risk_factors.append('High urgency in email body')
+
+    if email_features.get('body_caps_ratio', 0) > 0.3:
+        heuristic_score += 0.1
+        risk_factors.append('Excessive capitalization')
+
+    if suspicious_url_count > 0:
+        heuristic_score += min(0.3, suspicious_url_count * 0.15)
+        risk_factors.append(f'Suspicious URLs detected ({suspicious_url_count})')
+
+    heuristic_score = max(heuristic_score, max_url_risk * 0.7)
+
+    if email_features.get('has_suspicious_attachment', 0) == 1:
+        heuristic_score += 0.25
+        risk_factors.append('Suspicious attachment detected')
+
+    if email_features.get('html_has_form', 0) == 1 and email_features.get('html_has_input', 0) == 1:
+        heuristic_score += 0.2
+        risk_factors.append('Email contains login form')
+
+    if email_features.get('has_auth_failure', 0) == 1:
+        heuristic_score += 0.15
+        risk_factors.append('Email authentication failed')
+
+    return min(1.0, heuristic_score), risk_factors
+
+
+def combine_email_risk_scores(email_model_result, heuristic_score, max_url_risk, email_features):
+    """Blend BERT email inference with the existing feature and URL signals."""
+    model_risk = float(email_model_result.get('risk_score', 0.0))
+    model_available = bool(email_model_result.get('available'))
+
+    if model_available:
+        combined_risk = max(model_risk, (0.65 * model_risk) + (0.35 * heuristic_score))
+    else:
+        combined_risk = heuristic_score
+
+    if max_url_risk > 0:
+        if model_available:
+            combined_risk = max(combined_risk, (0.55 * model_risk) + (0.45 * max_url_risk), max_url_risk * 0.9)
+        else:
+            combined_risk = max(combined_risk, max_url_risk * 0.9)
+
+    strong_signal_bonus = 0.0
+    if email_features.get('has_suspicious_attachment', 0) == 1:
+        strong_signal_bonus += 0.08
+    if email_features.get('html_has_form', 0) == 1 and email_features.get('html_has_input', 0) == 1:
+        strong_signal_bonus += 0.05
+    if email_features.get('has_auth_failure', 0) == 1:
+        strong_signal_bonus += 0.05
+
+    return min(1.0, max(0.0, combined_risk + strong_signal_bonus))
 
 @app.route('/check_url', methods=['POST'])
 def check_url():
@@ -208,18 +358,8 @@ def check_url():
     )
 
     prediction_label = "phishing" if prediction == 1 else "safe"
-    risk_score = float(probabilities[1])
-    risk_score = max(0.0, min(1.0, risk_score))
-
-    if prediction_label == "safe":
-        risk_level = "Low Risk"
-        message = "This URL appears to be safe."
-    elif risk_score >= 0.50:
-        risk_level = "High Risk"
-        message = "High risk detected - site likely phishing or vulnerable."
-    else:
-        risk_level = "Low Risk"
-        message = "Low risk detected - site appears safer."
+    risk_score = clamp(float(probabilities[1]))
+    risk_level, message = get_url_risk_response(prediction_label, risk_score)
     
     # Build response payload
     response_payload = {
@@ -241,25 +381,11 @@ def check_url():
 
         all_model_metrics = model_components.get('all_model_metrics', {})
         selected_metrics = all_model_metrics.get(active_model_name) or model_components.get('best_model_metrics', {})
-        normalized_selected_metrics = {
-            'accuracy': float(selected_metrics.get('accuracy', 0)),
-            'recall_phishing': float(selected_metrics.get('recall_phishing', 0)),
-            'f1_phishing': float(selected_metrics.get('f1_phishing', 0)),
-            'precision_phishing': float(selected_metrics.get('precision_phishing', 0)),
-            'auc': float(selected_metrics.get('auc_score', 0))
+        response_payload['modelMetrics'] = normalize_model_metrics(selected_metrics)
+        response_payload['modelComparisons'] = {
+            model_name: normalize_model_metrics(metrics)
+            for model_name, metrics in all_model_metrics.items()
         }
-        response_payload['modelMetrics'] = normalized_selected_metrics
-
-        model_comparisons = {}
-        for model_name, metrics in all_model_metrics.items():
-            model_comparisons[model_name] = {
-                'accuracy': float(metrics.get('accuracy', 0)),
-                'recall_phishing': float(metrics.get('recall_phishing', 0)),
-                'f1_phishing': float(metrics.get('f1_phishing', 0)),
-                'precision_phishing': float(metrics.get('precision_phishing', 0)),
-                'auc': float(metrics.get('auc_score', 0))
-            }
-        response_payload['modelComparisons'] = model_comparisons
 
     return jsonify(response_payload)
 
@@ -267,7 +393,8 @@ def check_url():
 @app.route('/check_email', methods=['POST'])
 def check_email():
     """
-    Endpoint for email phishing classification.
+    Endpoint for email phishing classification using BERT text inference
+    combined with existing explainable feature and URL analysis.
 
     Expected JSON payload:
     {
@@ -311,105 +438,29 @@ def check_email():
         email_features = extract_email_features(data)
         extracted_urls = email_features.pop('extracted_urls', [])
 
-        # Analyze extracted URLs using existing URL classifier
-        url_analysis = []
-        suspicious_url_count = 0
-        max_url_risk = 0.0
+        url_analysis, suspicious_url_count, max_url_risk = analyze_email_urls(extracted_urls)
+        heuristic_risk_score, risk_factors = calculate_email_heuristic_risk(
+            email_features,
+            suspicious_url_count,
+            max_url_risk
+        )
+        email_model_result = predict_email_with_model(data, extracted_urls)
 
-        for url in extracted_urls[:10]:  # Limit to first 10 URLs to avoid overload
-            try:
-                _, url_probabilities, _, _, _ = predict_single_url(url, model_components)
-                url_risk = float(url_probabilities[1])
-                max_url_risk = max(max_url_risk, url_risk)
+        model_risk_score = float(email_model_result.get('risk_score', 0.0))
+        if email_model_result.get('available'):
+            if model_risk_score >= 0.75:
+                risk_factors.insert(0, 'BERT email model detected phishing-like wording')
+            elif model_risk_score >= 0.45:
+                risk_factors.insert(0, 'BERT email model detected suspicious wording')
 
-                url_analysis.append({
-                    'url': url,
-                    'risk': url_risk,
-                    'classification': 'phishing' if url_risk >= 0.5 else 'safe'
-                })
+        risk_score = combine_email_risk_scores(
+            email_model_result,
+            heuristic_risk_score,
+            max_url_risk,
+            email_features
+        )
 
-                if url_risk >= 0.6:
-                    suspicious_url_count += 1
-            except Exception as e:
-                print(f"Error analyzing URL {url}: {e}")
-
-        # Calculate email risk score based on features and URL analysis
-        # This is a simple heuristic - could be replaced with a trained model
-        risk_score = 0.0
-        risk_factors = []
-
-        # Sender-based risk
-        if email_features.get('sender_is_freemail', 0) == 1:
-            risk_score += 0.1
-        if email_features.get('sender_has_suspicious_tld', 0) == 1:
-            risk_score += 0.15
-            risk_factors.append('Suspicious sender domain')
-        if email_features.get('reply_to_mismatch', 0) == 1:
-            risk_score += 0.2
-            risk_factors.append('Reply-to address mismatch')
-        if email_features.get('from_name_has_brand', 0) == 1:
-            risk_score += 0.15
-            risk_factors.append('Brand impersonation attempt')
-
-        # Subject-based risk
-        urgency_count = email_features.get('subject_urgency_count', 0)
-        if urgency_count > 0:
-            risk_score += min(0.2, urgency_count * 0.1)
-            risk_factors.append(f'Urgency keywords detected ({urgency_count})')
-
-        financial_count = email_features.get('subject_financial_count', 0)
-        if financial_count > 0:
-            risk_score += min(0.15, financial_count * 0.08)
-            risk_factors.append(f'Financial keywords detected ({financial_count})')
-
-        # Body-based risk
-        if email_features.get('body_urgency_count', 0) > 2:
-            risk_score += 0.15
-            risk_factors.append('High urgency in email body')
-
-        if email_features.get('body_caps_ratio', 0) > 0.3:
-            risk_score += 0.1
-            risk_factors.append('Excessive capitalization')
-
-        # URL-based risk
-        if suspicious_url_count > 0:
-            risk_score += min(0.3, suspicious_url_count * 0.15)
-            risk_factors.append(f'Suspicious URLs detected ({suspicious_url_count})')
-
-        # Incorporate max URL risk
-        risk_score = max(risk_score, max_url_risk * 0.7)
-
-        # Attachment risk
-        if email_features.get('has_suspicious_attachment', 0) == 1:
-            risk_score += 0.25
-            risk_factors.append('Suspicious attachment detected')
-
-        # HTML form risk (phishing pages)
-        if email_features.get('html_has_form', 0) == 1 and email_features.get('html_has_input', 0) == 1:
-            risk_score += 0.2
-            risk_factors.append('Email contains login form')
-
-        # Authentication failure
-        if email_features.get('has_auth_failure', 0) == 1:
-            risk_score += 0.15
-            risk_factors.append('Email authentication failed')
-
-        # Normalize risk score to 0-1 range
-        risk_score = min(1.0, risk_score)
-
-        # Determine risk level and prediction
-        if risk_score >= 0.65:
-            risk_level = "High Risk"
-            prediction = "phishing"
-            message = "This email shows multiple signs of a phishing attempt."
-        elif risk_score >= 0.4:
-            risk_level = "Medium Risk"
-            prediction = "suspicious"
-            message = "This email contains some suspicious elements. Exercise caution."
-        else:
-            risk_level = "Low Risk"
-            prediction = "safe"
-            message = "This email appears to be safe."
+        prediction, risk_level, message = get_email_risk_response(risk_score)
 
         # Convert phishing probability for consistency with URL classifier
         phishing_prob = risk_score
@@ -426,17 +477,22 @@ def check_email():
             'emailFeatures': email_features,
             'urlAnalysis': url_analysis,
             'suspiciousUrlCount': suspicious_url_count,
-            'totalUrls': len(extracted_urls)
+            'totalUrls': len(extracted_urls),
+            'emailModel': get_email_model_metadata(email_model_result)
         }
 
-        # Include model info for consistency
-        if model_components is not None:
-            active_model_name = model_components.get('model_name', 'Email Heuristic Classifier')
-            response_payload['modelName'] = active_model_name
-
-            # For email, we're using heuristics, so provide appropriate metrics
+        if email_model_result.get('available'):
+            response_payload['modelName'] = email_model_result.get('model_name', 'BERT Email Classifier')
             response_payload['modelMetrics'] = {
-                'type': 'rule-based',
+                'type': 'bert-hybrid',
+                'features_analyzed': len(email_features),
+                'urls_analyzed': len(url_analysis),
+                'decision_threshold': float(email_model_result.get('decision_threshold', DEFAULT_DECISION_THRESHOLD))
+            }
+        else:
+            response_payload['modelName'] = 'Email Heuristic Fallback'
+            response_payload['modelMetrics'] = {
+                'type': 'rule-based-fallback',
                 'features_analyzed': len(email_features),
                 'urls_analyzed': len(url_analysis)
             }

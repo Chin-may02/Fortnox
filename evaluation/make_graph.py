@@ -119,9 +119,3 @@ for i, model in enumerate(models):
 
 # Show the plot
 plt.show()
-
-
-
-
-
-

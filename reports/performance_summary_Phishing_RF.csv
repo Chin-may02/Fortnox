@@ -1,2 +1,0 @@
-Model,Accuracy (%),Precision,Recall,F1-Score,Time (s)
-Random Forest,95.94,0.9501,0.8643,0.9052,617.2995

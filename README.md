@@ -10,7 +10,7 @@ The project focuses on two use cases:
 
 ## What The Project Includes
 
-FORTNOX combines model-based URL detection with rule-based email risk analysis. The browser extension handles collection and display, while the Flask backend performs the actual analysis and returns a structured risk result.
+FORTNOX combines model-based URL detection with BERT-powered email classification plus explainable email risk analysis. The browser extension handles collection and display, while the Flask backend performs the actual analysis and returns a structured risk result.
 
 At a high level:
 - The extension sends URLs to the backend for phishing checks
@@ -32,7 +32,8 @@ At a high level:
 
 - Automatic email monitoring inside Gmail
 - Email extraction directly from the Gmail interface
-- Risk scoring based on sender, subject, body, links, HTML structure, and attachments
+- BERT-based classification of combined email text using the saved model in `models/results`
+- Additional risk scoring based on sender, subject, body, links, HTML structure, and attachments
 - Per-email risk badge shown in the Gmail UI
 - High-risk warning overlay for suspicious emails
 - URL extraction from email content with follow-up URL analysis on detected links
@@ -114,7 +115,12 @@ Examples of URL-oriented signals include:
 
 ### Email Analysis
 
-The email flow currently uses heuristic scoring rather than a separate trained email model. It evaluates a message using extracted features such as:
+The email flow now uses a hybrid path:
+- A fine-tuned BERT classifier saved in `models/results`
+- Existing feature extraction for explainable email signals
+- Existing URL classification for embedded links found in the message
+
+The feature and URL layer still evaluates a message using extracted signals such as:
 - sender domain traits
 - freemail usage
 - suspicious TLDs
@@ -126,7 +132,7 @@ The email flow currently uses heuristic scoring rather than a separate trained e
 - suspicious attachments
 - HTML forms or input fields in the email body
 
-The backend also analyzes up to 10 extracted URLs from an email using the URL classifier and folds that into the email risk score.
+The backend also analyzes up to 10 extracted URLs from an email using the URL classifier and folds that into the final email risk score without affecting the standalone `/check_url` flow.
 
 Email results are returned as:
 - `Low Risk`
@@ -143,7 +149,7 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-The main dependencies include Flask, pandas, numpy, scikit-learn, joblib, xgboost, and requests.
+The main dependencies include Flask, pandas, numpy, scikit-learn, joblib, xgboost, requests, torch, transformers, and safetensors.
 
 ## Running The Backend
 
@@ -176,9 +182,11 @@ The extension uses permissions for browser tabs, storage, navigation events, and
   Accepts a URL and returns a phishing prediction, risk score, probabilities, and model details.
 
 - `POST /check_email`
-  Accepts extracted email content and returns an email risk result, supporting features, and URL analysis data for links found in the message.
+  Accepts extracted email content and returns a BERT-backed email risk result, supporting features, and URL analysis data for links found in the message.
 
 ## Training
+
+### URL Model
 
 To retrain the URL model:
 
@@ -191,6 +199,26 @@ This updates the saved model artifact used by the backend:
 
 ```text
 models/final_phishing_model.joblib
+```
+
+### Email Model
+
+The BERT training notebook is stored at:
+
+```text
+training/Bert_training.ipynb
+```
+
+The email dataset used for that training is stored at:
+
+```text
+data/phishing_email.csv
+```
+
+The saved email model artifacts consumed by the backend are stored at:
+
+```text
+models/results
 ```
 
 ## Reports
