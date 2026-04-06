@@ -1,4 +1,4 @@
 models/final_phishing_model.joblib.backup
 models/final_phishing_model.joblib
 models/results
-Fortnox/data/phishing_email.csv
+data/phishing_email.csv
