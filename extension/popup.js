@@ -2,6 +2,9 @@
 document.addEventListener('DOMContentLoaded', function () {
     const scanCurrentPageButton = document.getElementById('scanCurrentPageButton');
     const currentPageUrlElement = document.getElementById('currentPageUrl');
+    const permissionSummaryMeta = document.getElementById('permissionSummaryMeta');
+    const permissionSummaryStatus = document.getElementById('permissionSummaryStatus');
+    const permissionSummaryList = document.getElementById('permissionSummaryList');
 
     const resultsDisplayArea = document.getElementById('resultsDisplayArea');
     const scanResultSubSection = document.getElementById('scanResultSubSection');
@@ -82,15 +85,189 @@ document.addEventListener('DOMContentLoaded', function () {
         return { level, score, cssClass };
     }
 
+    function formatPermissionStateLabel(state) {
+        switch (state) {
+            case 'granted':
+                return 'Allowed';
+            case 'prompt':
+                return 'Ask First';
+            case 'denied':
+                return 'Blocked';
+            case 'unsupported':
+                return 'Unavailable';
+            case 'not-requested':
+                return 'Not Requested';
+            default:
+                return 'Unknown';
+        }
+    }
+
+    function formatPermissionActivityLabel(access) {
+        switch (access) {
+            case 'used':
+                return 'Used Here';
+            case 'requested':
+                return 'Requested Here';
+            default:
+                return 'Not Observed';
+        }
+    }
+
+    function getPermissionCardTone(permission) {
+        if (permission?.access === 'used' || permission?.state === 'granted') {
+            return 'permission-card-alert';
+        }
+        if (permission?.access === 'requested') {
+            return 'permission-card-watch';
+        }
+        if (permission?.state === 'denied') {
+            return 'permission-card-blocked';
+        }
+        return 'permission-card-idle';
+    }
+
+    function setPermissionSummaryStatus(text, tone = 'neutral') {
+        if (!permissionSummaryStatus) {
+            return;
+        }
+
+        permissionSummaryStatus.textContent = text;
+        permissionSummaryStatus.className = `permission-summary-status permission-summary-status-${tone}`;
+    }
+
+    function setPermissionSummaryLoading(message) {
+        if (permissionSummaryMeta) {
+            permissionSummaryMeta.textContent = 'Checking major sensitive permissions used by this site...';
+        }
+        setPermissionSummaryStatus(message, 'neutral');
+        if (permissionSummaryList) {
+            permissionSummaryList.innerHTML = '';
+        }
+    }
+
+    function setPermissionSummaryError(message) {
+        if (permissionSummaryMeta) {
+            permissionSummaryMeta.textContent = 'Permission monitoring is available on normal websites that allow the content script to run.';
+        }
+        setPermissionSummaryStatus(message, 'warning');
+        if (permissionSummaryList) {
+            permissionSummaryList.innerHTML = '';
+        }
+    }
+
+    function renderPermissionSummary(summary) {
+        if (!permissionSummaryMeta || !permissionSummaryStatus || !permissionSummaryList) {
+            return;
+        }
+
+        const permissions = Array.isArray(summary?.permissions) ? summary.permissions : [];
+        const counts = summary?.counts || {};
+
+        permissionSummaryMeta.textContent = summary?.secureContext
+            ? 'Tracking location, camera, microphone, notifications, clipboard, and screen capture for the current site.'
+            : 'This page is not running in a secure browser context, so some permissions may be unavailable by default.';
+
+        if (!permissions.length) {
+            setPermissionSummaryStatus('No permission details were returned for this page.', 'warning');
+            permissionSummaryList.innerHTML = '';
+            return;
+        }
+
+        const statusParts = [
+            `${counts.granted || 0} allowed`,
+            `${counts.requested || 0} requested`,
+            `${counts.used || 0} used in this tab`
+        ];
+
+        if (counts.denied) {
+            statusParts.push(`${counts.denied} blocked`);
+        }
+
+        const headlineTone = (counts.used || counts.granted) ? 'alert' : (counts.denied ? 'warning' : 'neutral');
+        setPermissionSummaryStatus(statusParts.join(' | '), headlineTone);
+
+        permissionSummaryList.innerHTML = '';
+        permissions.forEach((permission) => {
+            const card = document.createElement('div');
+            card.className = `permission-card ${getPermissionCardTone(permission)}`;
+
+            const header = document.createElement('div');
+            header.className = 'permission-card-header';
+
+            const title = document.createElement('span');
+            title.className = 'permission-card-name';
+            title.textContent = permission.label;
+
+            header.appendChild(title);
+            card.appendChild(header);
+
+            const pillRow = document.createElement('div');
+            pillRow.className = 'permission-card-pill-row';
+
+            const statePill = document.createElement('span');
+            statePill.className = `permission-pill permission-pill-state-${permission.state || 'unknown'}`;
+            statePill.textContent = formatPermissionStateLabel(permission.state);
+
+            const activityPill = document.createElement('span');
+            activityPill.className = `permission-pill permission-pill-activity-${permission.access || 'not_observed'}`;
+            activityPill.textContent = formatPermissionActivityLabel(permission.access);
+
+            pillRow.appendChild(statePill);
+            pillRow.appendChild(activityPill);
+            card.appendChild(pillRow);
+
+            const detail = document.createElement('p');
+            detail.className = 'permission-card-detail';
+            detail.textContent = permission?.lastEvent?.api
+                ? `Last activity: ${permission.lastEvent.api}`
+                : 'No sensitive permission activity observed in this tab yet.';
+            card.appendChild(detail);
+
+            permissionSummaryList.appendChild(card);
+        });
+    }
+
+    function loadPermissionSummary(tab) {
+        if (!tab?.id) {
+            setPermissionSummaryError('Could not determine the current tab for permission monitoring.');
+            return;
+        }
+
+        const tabUrl = tab.url || '';
+        const isWebPage = tabUrl.startsWith('http://') || tabUrl.startsWith('https://');
+        if (!isWebPage) {
+            setPermissionSummaryError('Permission monitoring is only available on standard web pages.');
+            return;
+        }
+
+        setPermissionSummaryLoading('Loading permission summary...');
+
+        chrome.tabs.sendMessage(tab.id, { action: 'getPermissionSummary' }, (response) => {
+            if (chrome.runtime.lastError) {
+                setPermissionSummaryError('Permission monitor is not ready on this page yet. Try reloading the site.');
+                return;
+            }
+
+            if (response?.error) {
+                setPermissionSummaryError(response.error);
+                return;
+            }
+
+            renderPermissionSummary(response?.summary);
+        });
+    }
+
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
         if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
             currentPageUrlElement.textContent = "Error loading current URL.";
+            setPermissionSummaryError('Could not load the active tab for permission monitoring.');
             return;
         }
-        const currentUrl = tabs[0].url;
+        const currentUrl = tabs[0].url || '';
         const isWebPage = currentUrl.startsWith("http://") || currentUrl.startsWith("https://");
 
-        currentPageUrlElement.textContent = currentUrl;
+        currentPageUrlElement.textContent = currentUrl || "URL unavailable for this page.";
+        loadPermissionSummary(tabs[0]);
         if (!isWebPage) {
             currentPageUrlElement.textContent = "This is not a standard web page.";
             scanCurrentPageButton.disabled = true;

@@ -8,12 +8,19 @@
     <div class="container">
 
         <header class="popup-header">
+            <div class="brand-badge-row">
+                <span class="brand-badge">FORTNOX Shield</span>
+                <span class="brand-badge brand-badge-muted">Live protection</span>
+            </div>
             <h1>FORTNOX</h1>
-            <p class="subtitle">Analyze the current page for potential threats.</p>
+            <p class="subtitle">Analyze the current page for threats, review sensitive permissions, and understand the model's decision without leaving your tab.</p>
         </header>
 
         <section class="action-section" id="currentPageActionsSection">
-            <h2>Current Page Analysis</h2>
+            <div class="section-heading">
+                <p class="section-kicker">Current tab</p>
+                <h2>Current Page Analysis</h2>
+            </div>
             <div id="currentPageInfo">
                 <p class="label-display">Current URL:</p>
                 <p id="currentPageUrl" class="url-display-box">Loading...</p>
@@ -22,9 +29,24 @@
                 <button id="scanCurrentPageButton">Scan Current Page for Threats</button>
             </div>
         </section>
+
+        <section class="action-section permission-summary-section" id="permissionSummarySection">
+            <div class="section-heading">
+                <p class="section-kicker">Sensitive access</p>
+                <h2>Site Permission Summary</h2>
+            </div>
+            <p id="permissionSummaryMeta" class="permission-summary-meta">
+                Checking major sensitive permissions used by this site...
+            </p>
+            <p id="permissionSummaryStatus" class="permission-summary-status">Loading permission summary...</p>
+            <div id="permissionSummaryList" class="permission-summary-list"></div>
+        </section>
         
         <section id="resultsDisplayArea" class="results-section" aria-live="polite" style="display: none;">
-            <h3>Analysis Results</h3>
+            <div class="section-heading">
+                <p class="section-kicker">Analysis workspace</p>
+                <h3>Analysis Results</h3>
+            </div>
             <div id="scanResultSubSection" style="display: none;">
                 <div id="resultArea" class="status-box">
                     <p id="status"></p>
