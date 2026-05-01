@@ -8,7 +8,7 @@
  * 4. Displays inline risk indicators
  */
 
-console.log('[FORTNOX Gmail] Content script loaded');
+console.log('[FortNox Gmail] Content script loaded');
 
 // Track analyzed emails to avoid duplicates
 const analyzedEmails = new Set();
@@ -105,7 +105,7 @@ function extractEmailData() {
             attachments: attachments
         };
     } catch (error) {
-        console.error('[FORTNOX Gmail] Error extracting email data:', error);
+        console.error('[FortNox Gmail] Error extracting email data:', error);
         return null;
     }
 }
@@ -242,7 +242,7 @@ function createRiskBadge(riskLevel, riskScore, riskFactors) {
         <div class="risk-header">
             <div class="risk-title">
                 <span>${icon}</span>
-                <span>FORTNOX Security</span>
+                <span>FortNox Security</span>
             </div>
             <button class="close-btn" id="fortnox-close-badge">×</button>
         </div>
@@ -254,7 +254,7 @@ function createRiskBadge(riskLevel, riskScore, riskFactors) {
                 ${riskFactors.slice(0, 4).map(factor => `<div class="factor-item">${factor}</div>`).join('')}
             </div>
         ` : ''}
-        <div class="powered-by">Powered by FORTNOX ML</div>
+        <div class="powered-by">Powered by FortNox</div>
     `;
 
     document.body.appendChild(badge);
@@ -370,18 +370,18 @@ async function analyzeCurrentEmail() {
     const emailData = extractEmailData();
 
     if (!emailData || !emailData.from_email) {
-        console.log('[FORTNOX Gmail] No valid email data found');
+        console.log('[FortNox Gmail] No valid email data found');
         return;
     }
 
     // Check if already analyzed
     if (analyzedEmails.has(emailData.emailId)) {
-        console.log('[FORTNOX Gmail] Email already analyzed');
+        console.log('[FortNox Gmail] Email already analyzed');
         return;
     }
 
     analyzedEmails.add(emailData.emailId);
-    console.log('[FORTNOX Gmail] Analyzing email from:', emailData.from_email);
+    console.log('[FortNox Gmail] Analyzing email from:', emailData.from_email);
 
     try {
         // Send to background for analysis
@@ -391,12 +391,12 @@ async function analyzeCurrentEmail() {
         });
 
         if (response.error) {
-            console.error('[FORTNOX Gmail] Analysis error:', response.error);
+            console.error('[FortNox Gmail] Analysis error:', response.error);
             return;
         }
 
         const result = response.data;
-        console.log('[FORTNOX Gmail] Analysis result:', result);
+        console.log('[FortNox Gmail] Analysis result:', result);
 
         // Display risk badge
         createRiskBadge(result.riskLevel, result.riskScore, result.riskFactors);
@@ -407,7 +407,7 @@ async function analyzeCurrentEmail() {
         }
 
     } catch (error) {
-        console.error('[FORTNOX Gmail] Error during analysis:', error);
+        console.error('[FortNox Gmail] Error during analysis:', error);
     }
 }
 
@@ -440,7 +440,7 @@ function initializeGmailMonitoring() {
             childList: true,
             subtree: true
         });
-        console.log('[FORTNOX Gmail] Monitoring initialized');
+        console.log('[FortNox Gmail] Monitoring initialized');
 
         // Check current state
         monitorEmailChanges();

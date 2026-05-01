@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "name": "FORTNOX",
+    "name": "FortNox",
     "version": "0.2.0",
     "description": "ML-based Chrome extension for web security and email phishing detection.",
     "permissions": [

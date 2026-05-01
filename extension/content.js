@@ -108,7 +108,7 @@ function showWarningOverlay(details) {
         overlay.innerHTML = `
             <div class="fortnox-warning-shell">
                 <div class="fortnox-warning-badges">
-                    <span class="fortnox-warning-badge">FORTNOX Shield</span>
+                    <span class="fortnox-warning-badge">FortNox Shield</span>
                     <span class="fortnox-warning-badge fortnox-warning-badge-danger">${warningBadgeText}</span>
                 </div>
                 <h1>${warningTitle}</h1>
@@ -472,7 +472,7 @@ function renderPermissionToast(root, toast) {
 
     const eyebrow = document.createElement('p');
     eyebrow.className = 'fortnox-permission-toast-eyebrow';
-    eyebrow.textContent = 'FORTNOX permission monitor';
+    eyebrow.textContent = 'FortNox permission monitor';
 
     const title = document.createElement('h3');
     title.className = 'fortnox-permission-toast-title';
